@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="it" data-nome="{{NOME}}" data-ditta="{{DITTA}}" data-piva="{{DITTA_PIVA}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Accedi – {{NOME}}</title>
+<link rel="icon" href="/img/icona.svg">
+<link rel="stylesheet" href="/css/stile.css">
+</head>
+<body>
+<main>
+  <div class="pannello stretto">
+    <div class="schede" role="tablist">
+      <button role="tab" aria-selected="true" data-modo="accedi">Accedi</button>
+      <button role="tab" aria-selected="false" data-modo="registrati">Crea un account</button>
+    </div>
+    <form id="modulo" novalidate>
+      <div id="campo-nome" hidden>
+        <label for="nome">Nome</label>
+        <input type="text" id="nome" autocomplete="name" maxlength="60">
+      </div>
+      <label for="email">Email</label>
+      <input type="email" id="email" autocomplete="email" required>
+      <label for="password">Password</label>
+      <input type="password" id="password" autocomplete="current-password" required minlength="8">
+      <p class="muted piccolo" id="nota-pw" hidden>Almeno 8 caratteri.</p>
+      <label class="spunta" id="campo-accetto" hidden><input type="checkbox" id="accetto">
+        <span>Ho letto e accetto i <a href="/termini.html" target="_blank">termini del servizio</a> e l'<a href="/privacy.html" target="_blank">informativa privacy</a>.</span></label>
+      <div class="avviso" id="msg" role="alert"></div>
+      <button class="btn grande" style="width:100%;margin-top:16px" id="invia">Accedi</button>
+      <p class="muted piccolo" style="margin-top:16px">Password dimenticata? Scrivi a <a href="mailto:{{DITTA_EMAIL}}">{{DITTA_EMAIL}}</a> e te ne imposteremo una nuova.</p>
+    </form>
+  </div>
+</main>
+<script src="/js/comune.js"></script>
+<script>
+(async () => {
+  await testata();
+  const dopo = parametro('dopo') || '/';
+  let modo = parametro('modo') === 'registrati' ? 'registrati' : 'accedi';
+  function imposta(m) {
+    modo = m;
+    document.querySelectorAll('[role=tab]').forEach((t) => t.setAttribute('aria-selected', t.dataset.modo === m));
+    const reg = m === 'registrati';
+    $('#campo-nome').hidden = !reg; $('#campo-accetto').hidden = !reg; $('#nota-pw').hidden = !reg;
+    $('#password').autocomplete = reg ? 'new-password' : 'current-password';
+    $('#invia').textContent = reg ? 'Crea l\'account' : 'Accedi';
+    messaggio($('#msg'), '');
+  }
+  document.querySelectorAll('[role=tab]').forEach((t) => t.onclick = () => imposta(t.dataset.modo));
+  imposta(modo);
+
+  $('#modulo').onsubmit = async (e) => {
+    e.preventDefault();
+    const b = $('#invia'); b.disabled = true;
+    try {
+      await api(`/${modo}`, { method: 'POST', body: {
+        email: $('#email').value, password: $('#password').value, nome: $('#nome').value, accetto: $('#accetto').checked,
+      } });
+      location.href = dopo.startsWith('/') && !dopo.startsWith('//') ? dopo : '/';
+    } catch (err) { messaggio($('#msg'), err.message); b.disabled = false; }
+  };
+})();
+</script>
+</body>
+</html>

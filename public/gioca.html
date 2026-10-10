@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="it" data-nome="{{NOME}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<title>Gioca – {{NOME}}</title>
+<link rel="icon" href="/img/icona.svg">
+<link rel="stylesheet" href="/css/stile.css">
+<style>
+  html, body { height: 100%; overflow: hidden; background: #000; }
+  body { display: grid; grid-template-rows: auto 1fr; }
+  .barra { display: flex; align-items: center; gap: 12px; padding: 8px 12px; background: var(--notte); }
+  .barra h1 { font-size: 1rem; margin: 0; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .barra a { color: var(--lavanda); text-decoration: none; font-weight: 600; padding: 6px 8px; }
+  iframe { width: 100%; height: 100%; border: 0; display: block; background: #000; }
+  .pad { color: var(--verde); font-size: .85rem; }
+  body.intero .barra { display: none; }
+</style>
+</head>
+<body>
+<div class="barra">
+  <a href="/" id="indietro">Esci</a>
+  <h1 id="titolo">Caricamento…</h1>
+  <span class="pad" id="pad" hidden>Gamepad collegato</span>
+  <button class="btn piccolo secondario" id="intero">Schermo intero</button>
+</div>
+<iframe id="schermo" title="Gioco" allow="autoplay; fullscreen; gamepad; accelerometer; gyroscope" allowfullscreen></iframe>
+<script src="/js/comune.js"></script>
+<script>
+(async () => {
+  const slug = parametro('slug');
+  let d;
+  try { d = await api(`/giochi/${encodeURIComponent(slug)}`); }
+  catch { location.replace('/'); return; }
+  if (!d.puoGiocare) { location.replace(`/abbonati.html?gioco=${encodeURIComponent(slug)}`); return; }
+  const g = d.gioco;
+  document.title = `${g.titolo} – ${NOME}`;
+  $('#titolo').textContent = g.titolo;
+  $('#indietro').href = `/gioco.html?slug=${encodeURIComponent(slug)}`;
+  const f = $('#schermo');
+  f.src = `/gioca/${encodeURIComponent(slug)}/`;
+  f.addEventListener('load', () => f.focus());
+
+  $('#intero').onclick = async () => {
+    try {
+      await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+      if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {});
+    } catch { document.body.classList.toggle('intero'); }
+    f.focus();
+  };
+  document.addEventListener('fullscreenchange', () => document.body.classList.toggle('intero', !!document.fullscreenElement));
+  window.addEventListener('gamepadconnected', () => { $('#pad').hidden = false; });
+  window.addEventListener('gamepaddisconnected', () => { $('#pad').hidden = navigator.getGamepads().some(Boolean) ? false : true; });
+})();
+</script>
+</body>
+</html>

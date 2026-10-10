@@ -1,0 +1,44 @@
+services:
+  - type: web
+    name: piattaforma-giochi
+    runtime: node
+    plan: starter            # il piano free si addormenta dopo 15 minuti: per un servizio a pagamento meglio "starter"
+    region: frankfurt
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /salute
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NOME_PIATTAFORMA
+        value: Arcadia Indie
+      - key: PREZZO_ABBONAMENTO
+        value: "1.00"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: URL_PUBBLICO
+        sync: false          # es. https://piattaforma-giochi.onrender.com o il tuo dominio
+      - key: ADMIN_EMAIL
+        sync: false          # l'email con cui ti registri diventa amministratore
+      - key: DATABASE_URL
+        sync: false          # Supabase → Project Settings → Database → Connection string (Session pooler)
+      - key: STORAGE
+        value: supabase
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false          # chiave "service_role" (segreta, solo lato server)
+      - key: SUPABASE_BUCKET
+        value: giochi
+      - key: PAYPAL_AMBIENTE
+        value: sandbox       # metti "live" quando hai finito le prove
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_PLAN_ID
+        sync: false
+      - key: PAYPAL_WEBHOOK_ID
+        sync: false
+      - key: DITTA_EMAIL
+        sync: false          # email di assistenza mostrata agli utenti

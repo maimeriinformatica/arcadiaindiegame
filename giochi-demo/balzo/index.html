@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Balzo</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #17153a; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+  canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+  .tasti { position: fixed; bottom: 18px; left: 0; right: 0; display: none; justify-content: space-between; padding: 0 18px; pointer-events: none; }
+  .tasti div { display: flex; gap: 14px; }
+  .tasti button { pointer-events: auto; width: 74px; height: 74px; border-radius: 50%; border: 0; background: rgba(255,255,255,.16); color: #fff; font: 700 26px system-ui; }
+  .tasti button:active, .tasti button.giu { background: rgba(255,209,102,.5); }
+  @media (pointer: coarse) { .tasti { display: flex; } }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="tasti">
+  <div><button data-k="sx" aria-label="Sinistra">◀</button><button data-k="dx" aria-label="Destra">▶</button></div>
+  <div><button data-k="salto" aria-label="Salta">⤒</button></div>
+</div>
+<script>
+// Balzo – platform 2D dimostrativo. Tastiera, touch e gamepad.
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+const T = 32; // dimensione tessera
+
+// I livelli sono descritti a blocchi e costruiti in una griglia di 12 righe (terra in basso).
+// T n: terra · B n: buco · S n: spine · M: nemico · A n h: gradino alto h · p n h: piattaforma sospesa
+// c n: monete sulla terra · F: traguardo. Buchi e spine al massimo 3, salti al massimo 3 tessere in su.
+const DESCRIZIONI = [
+  'T 6 c 3 T 4 B 2 T 5 M T 3 p 4 3 T 6 A 3 1 T 3 B 3 T 4 S 2 T 4 M T 6 p 3 2 T 2 p 3 4 T 6 A 2 2 T 4 S 3 T 5 M T 6 F',
+  'T 5 B 3 T 3 A 2 2 T 3 S 3 T 4 p 3 3 T 2 B 3 T 3 M T 5 A 3 3 T 2 p 4 5 T 3 S 3 T 3 M T 4 B 3 T 2 p 2 2 B 3 T 5 S 2 T 2 S 2 T 6 M T 3 F',
+  'T 4 B 3 A 2 1 B 3 A 2 2 B 3 T 3 M T 4 S 3 T 2 p 3 3 S 3 T 2 S 3 T 3 A 3 3 p 3 5 T 3 M T 3 B 3 T 2 B 3 T 2 S 3 T 2 S 3 T 4 M T 2 p 5 3 M T 6 F',
+];
+function costruisci(desc) {
+  const R = 12, SUOLO = 10;
+  const col = [];
+  const nuova = () => { const c = Array(R).fill(' '); c[SUOLO] = c[SUOLO + 1] = '#'; col.push(c); return c; };
+  const t = desc.split(' ');
+  for (let i = 0; i < 3; i++) nuova();
+  col[1][SUOLO - 1] = 'P';
+  for (let i = 0; i < t.length;) {
+    const k = t[i++];
+    if (k === 'T') { const n = +t[i++]; for (let j = 0; j < n; j++) nuova(); }
+    else if (k === 'B') { const n = +t[i++]; for (let j = 0; j < n; j++) col.push(Array(R).fill(' ')); }
+    else if (k === 'S') { const n = +t[i++]; for (let j = 0; j < n; j++) nuova()[SUOLO - 1] = '^'; }
+    else if (k === 'M') { nuova(); nuova()[SUOLO - 1] = 'M'; nuova(); }
+    else if (k === 'c') { const n = +t[i++]; for (let j = 0; j < n; j++) nuova()[SUOLO - 2] = 'o'; }
+    else if (k === 'A') { const n = +t[i++], h = +t[i++]; for (let j = 0; j < n; j++) { const c = nuova(); for (let y = SUOLO - h; y < SUOLO; y++) c[y] = '#'; if (j % 2) c[SUOLO - h - 2] = 'o'; } }
+    else if (k === 'p') {
+      // piattaforma sospesa sopra le colonne successive (che restano vuote sotto: si passa anche sopra a buchi/spine)
+      const n = +t[i++], h = +t[i++];
+      const inizio = col.length;
+      for (let j = 0; j < n; j++) { const c = Array(R).fill(' '); col.push(c); }
+      for (let j = 0; j < n; j++) { col[inizio + j][SUOLO - h] = '='; if (j % 2 === 0) col[inizio + j][SUOLO - h - 2] = 'o'; }
+    }
+    else if (k === 'F') { nuova(); nuova()[SUOLO - 1] = 'F'; nuova(); nuova(); }
+  }
+  return Array.from({ length: R }, (_, y) => col.map((c) => c[y]).join(''));
+}
+const LIVELLI = DESCRIZIONI.map(costruisci);
+
+const tasti = { sx: false, dx: false, salto: false };
+let saltoPrecedente = false;
+addEventListener('keydown', (e) => {
+  if (['ArrowLeft', 'KeyA'].includes(e.code)) tasti.sx = true;
+  if (['ArrowRight', 'KeyD'].includes(e.code)) tasti.dx = true;
+  if (['ArrowUp', 'KeyW', 'Space'].includes(e.code)) { tasti.salto = true; e.preventDefault(); }
+  if (e.code === 'Enter' || e.code === 'Space') avvia();
+});
+addEventListener('keyup', (e) => {
+  if (['ArrowLeft', 'KeyA'].includes(e.code)) tasti.sx = false;
+  if (['ArrowRight', 'KeyD'].includes(e.code)) tasti.dx = false;
+  if (['ArrowUp', 'KeyW', 'Space'].includes(e.code)) tasti.salto = false;
+});
+document.querySelectorAll('.tasti button').forEach((b) => {
+  const k = b.dataset.k;
+  const on = (e) => { e.preventDefault(); tasti[k] = true; b.classList.add('giu'); avvia(); };
+  const off = (e) => { e.preventDefault(); tasti[k] = false; b.classList.remove('giu'); };
+  b.addEventListener('pointerdown', on); b.addEventListener('pointerup', off);
+  b.addEventListener('pointerleave', off); b.addEventListener('pointercancel', off);
+});
+cv.addEventListener('pointerdown', () => avvia());
+
+function leggiGamepad() {
+  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  const p = [...pads].find(Boolean);
+  if (!p) return null;
+  const ax = p.axes[0] || 0;
+  return {
+    sx: ax < -0.35 || (p.buttons[14] && p.buttons[14].pressed),
+    dx: ax > 0.35 || (p.buttons[15] && p.buttons[15].pressed),
+    salto: (p.buttons[0] && p.buttons[0].pressed) || (p.buttons[12] && p.buttons[12].pressed),
+    start: p.buttons[9] && p.buttons[9].pressed,
+  };
+}
+
+let stato = 'titolo'; // titolo, gioco, fine, vinto
+let livello = 0, mappa, eroe, nemici, monete, bandiera, camX = 0, punti = 0, vite = 3, particelle = [];
+
+function carica(n) {
+  const righe = LIVELLI[n];
+  mappa = righe.map((r) => r.split(''));
+  nemici = []; monete = [];
+  mappa.forEach((r, y) => r.forEach((c, x) => {
+    if (c === 'P') { eroe = { x: x * T, y: y * T, vx: 0, vy: 0, w: 22, h: 28, aTerra: false, dir: 1, coyote: 0 }; r[x] = ' '; }
+    if (c === 'M') { nemici.push({ x: x * T, y: y * T + 6, vx: -1.2, w: 26, h: 26, vivo: true }); r[x] = ' '; }
+    if (c === 'o') { monete.push({ x: x * T + 10, y: y * T + 10, presa: false }); r[x] = ' '; }
+    if (c === 'F') { bandiera = { x: x * T, y: y * T }; r[x] = ' '; }
+  }));
+  eroe.inizio = { x: eroe.x, y: eroe.y };
+  camX = 0;
+}
+
+function tessera(px, py) {
+  const x = Math.floor(px / T), y = Math.floor(py / T);
+  if (y < 0) return ' ';
+  if (!mappa[y] || x < 0 || x >= mappa[y].length) return y >= mappa.length ? 'vuoto' : '#';
+  return mappa[y][x];
+}
+const solido = (c) => c === '#';
+const piattaforma = (c) => c === '=';
+
+function avvia() {
+  if (stato === 'titolo' || stato === 'fine' || stato === 'vinto') {
+    if (stato !== 'titolo') { livello = 0; punti = 0; vite = 3; }
+    carica(livello); stato = 'gioco';
+  }
+}
+
+function perdiVita() {
+  vite--;
+  scoppio(eroe.x, eroe.y, '#ff6b7d');
+  if (vite <= 0) { stato = 'fine'; return; }
+  eroe.x = eroe.inizio.x; eroe.y = eroe.inizio.y; eroe.vx = eroe.vy = 0;
+}
+function scoppio(x, y, col) {
+  for (let i = 0; i < 14; i++) particelle.push({ x, y, vx: (Math.random() - .5) * 6, vy: -Math.random() * 6, v: 40, col });
+}
+
+function aggiorna() {
+  const pad = leggiGamepad();
+  const sx = tasti.sx || (pad && pad.sx), dx = tasti.dx || (pad && pad.dx), salta = tasti.salto || (pad && pad.salto);
+  if (pad && pad.start) avvia();
+  if (stato !== 'gioco') { if (salta && !saltoPrecedente) avvia(); saltoPrecedente = salta; return; }
+
+  const acc = eroe.aTerra ? 0.9 : 0.55;
+  if (sx) { eroe.vx -= acc; eroe.dir = -1; }
+  if (dx) { eroe.vx += acc; eroe.dir = 1; }
+  if (!sx && !dx) eroe.vx *= eroe.aTerra ? 0.75 : 0.95;
+  eroe.vx = Math.max(-4.6, Math.min(4.6, eroe.vx));
+
+  eroe.coyote = eroe.aTerra ? 6 : eroe.coyote - 1;
+  if (salta && !saltoPrecedente && eroe.coyote > 0) { eroe.vy = -11.2; eroe.coyote = 0; eroe.aTerra = false; }
+  if (!salta && eroe.vy < -4) eroe.vy = -4; // salto più basso se rilasci presto
+  saltoPrecedente = salta;
+  eroe.vy = Math.min(eroe.vy + 0.55, 12);
+
+  // Movimento orizzontale
+  eroe.x += eroe.vx;
+  for (const yy of [eroe.y + 2, eroe.y + eroe.h - 2]) {
+    if (eroe.vx > 0 && solido(tessera(eroe.x + eroe.w, yy))) { eroe.x = Math.floor((eroe.x + eroe.w) / T) * T - eroe.w - 0.01; eroe.vx = 0; }
+    if (eroe.vx < 0 && solido(tessera(eroe.x, yy))) { eroe.x = Math.floor(eroe.x / T + 1) * T + 0.01; eroe.vx = 0; }
+  }
+  if (eroe.x < 0) eroe.x = 0;
+
+  // Movimento verticale
+  const piediPrima = eroe.y + eroe.h;
+  eroe.y += eroe.vy;
+  eroe.aTerra = false;
+  for (const xx of [eroe.x + 3, eroe.x + eroe.w - 3]) {
+    const sotto = tessera(xx, eroe.y + eroe.h);
+    const cima = Math.floor((eroe.y + eroe.h) / T) * T;
+    if (eroe.vy >= 0 && (solido(sotto) || (piattaforma(sotto) && piediPrima <= cima + 1))) {
+      eroe.y = cima - eroe.h; eroe.vy = 0; eroe.aTerra = true;
+    }
+    if (eroe.vy < 0 && solido(tessera(xx, eroe.y))) { eroe.y = Math.floor(eroe.y / T + 1) * T; eroe.vy = 0; }
+  }
+
+  // Spine e cadute
+  const c = tessera(eroe.x + eroe.w / 2, eroe.y + eroe.h - 4);
+  if (c === '^') return perdiVita();
+  if (eroe.y > mappa.length * T + 80) return perdiVita();
+
+  // Monete
+  for (const m of monete) {
+    if (!m.presa && Math.abs(eroe.x + eroe.w / 2 - m.x - 6) < 18 && Math.abs(eroe.y + eroe.h / 2 - m.y - 6) < 20) {
+      m.presa = true; punti += 10; scoppio(m.x, m.y, '#ffd166');
+    }
+  }
+
+  // Nemici
+  for (const n of nemici) {
+    if (!n.vivo) continue;
+    n.x += n.vx;
+    const avanti = n.vx > 0 ? n.x + n.w + 1 : n.x - 1;
+    if (solido(tessera(avanti, n.y + 10)) || !(solido(tessera(avanti, n.y + n.h + 4)) || piattaforma(tessera(avanti, n.y + n.h + 4)))) n.vx *= -1;
+    if (eroe.x < n.x + n.w && eroe.x + eroe.w > n.x && eroe.y < n.y + n.h && eroe.y + eroe.h > n.y) {
+      if (eroe.vy > 0 && eroe.y + eroe.h - n.y < 16) { n.vivo = false; eroe.vy = -8; punti += 25; scoppio(n.x, n.y, '#b9b3e8'); }
+      else return perdiVita();
+    }
+  }
+
+  // Bandiera
+  if (Math.abs(eroe.x - bandiera.x) < 26 && eroe.y > bandiera.y - 20) {
+    punti += 100; livello++;
+    if (livello >= LIVELLI.length) { stato = 'vinto'; return; }
+    carica(livello);
+  }
+
+  const larghezza = mappa[0].length * T;
+  camX += ((eroe.x - vw / 2 / scala) - camX) * 0.12;
+  camX = Math.max(0, Math.min(camX, larghezza - vw / scala));
+}
+
+let vw, vh, scala;
+function ridimensiona() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  vw = innerWidth; vh = innerHeight;
+  cv.width = vw * dpr; cv.height = vh * dpr;
+  scala = vh / (12 * T);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+addEventListener('resize', ridimensiona); ridimensiona();
+
+let tempo = 0;
+function disegna() {
+  tempo++;
+  // Cielo a strati
+  const g = ctx.createLinearGradient(0, 0, 0, vh);
+  g.addColorStop(0, '#2d2963'); g.addColorStop(1, '#ff7a45');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, vw, vh);
+  ctx.fillStyle = 'rgba(23,21,58,.35)';
+  for (let i = 0; i < 8; i++) {
+    const x = ((i * 260 - camX * scala * 0.3) % (vw + 300) + vw + 300) % (vw + 300) - 150;
+    ctx.beginPath(); ctx.moveTo(x - 160, vh); ctx.lineTo(x, vh * 0.45 + (i % 3) * 40); ctx.lineTo(x + 160, vh); ctx.fill();
+  }
+
+  if (stato === 'titolo' || !mappa) { schermata('BALZO', 'Premi spazio, tocca lo schermo o A sul gamepad'); return; }
+
+  ctx.save();
+  ctx.scale(scala, scala);
+  ctx.translate(-Math.round(camX), 0);
+  const x0 = Math.floor(camX / T), x1 = x0 + Math.ceil(vw / scala / T) + 1;
+  for (let y = 0; y < mappa.length; y++) for (let x = x0; x <= x1; x++) {
+    const c = mappa[y][x];
+    if (c === '#') {
+      ctx.fillStyle = tessera(x * T, (y - 1) * T) === '#' ? '#221f4f' : '#3b3680';
+      ctx.fillRect(x * T, y * T, T, T);
+      if (tessera(x * T, (y - 1) * T) !== '#') { ctx.fillStyle = '#5fd3a0'; ctx.fillRect(x * T, y * T, T, 6); }
+    } else if (c === '=') {
+      ctx.fillStyle = '#ffd166'; ctx.fillRect(x * T, y * T, T, 10);
+      ctx.fillStyle = '#e8a93a'; ctx.fillRect(x * T, y * T + 10, T, 4);
+    } else if (c === '^') {
+      ctx.fillStyle = '#f6f0ff';
+      for (let k = 0; k < 3; k++) { ctx.beginPath(); ctx.moveTo(x * T + k * 11, y * T + T); ctx.lineTo(x * T + k * 11 + 5.5, y * T + 12); ctx.lineTo(x * T + k * 11 + 11, y * T + T); ctx.fill(); }
+    }
+  }
+  // Monete
+  for (const m of monete) if (!m.presa) {
+    const s = Math.abs(Math.sin(tempo / 12 + m.x)) * 6 + 2;
+    ctx.fillStyle = '#ffd166'; ctx.beginPath(); ctx.ellipse(m.x + 6, m.y + 6 + Math.sin(tempo / 15 + m.x) * 2, s, 8, 0, 0, 7); ctx.fill();
+  }
+  // Bandiera
+  ctx.fillStyle = '#f6f0ff'; ctx.fillRect(bandiera.x + 14, bandiera.y - 40, 4, 72);
+  ctx.fillStyle = '#ff7a45'; ctx.beginPath(); ctx.moveTo(bandiera.x + 18, bandiera.y - 40);
+  ctx.lineTo(bandiera.x + 44 + Math.sin(tempo / 8) * 3, bandiera.y - 30); ctx.lineTo(bandiera.x + 18, bandiera.y - 20); ctx.fill();
+  // Nemici
+  for (const n of nemici) if (n.vivo) {
+    ctx.fillStyle = '#b9b3e8'; ctx.beginPath(); ctx.roundRect(n.x, n.y + Math.sin(tempo / 6 + n.x) * 1.5, n.w, n.h, 8); ctx.fill();
+    ctx.fillStyle = '#17153a'; ctx.fillRect(n.x + (n.vx > 0 ? 15 : 5), n.y + 8, 5, 6); ctx.fillRect(n.x + (n.vx > 0 ? 21 : 11), n.y + 8, 5, 6);
+  }
+  // Eroe
+  const sch = eroe.aTerra ? 1 : 1.08;
+  ctx.fillStyle = '#ff7a45';
+  ctx.beginPath(); ctx.roundRect(eroe.x, eroe.y + eroe.h * (1 - 1 / sch), eroe.w, eroe.h / sch, 7); ctx.fill();
+  ctx.fillStyle = '#f6f0ff';
+  const oc = eroe.dir > 0 ? 12 : 3;
+  ctx.fillRect(eroe.x + oc, eroe.y + 7, 7, 7);
+  ctx.fillStyle = '#17153a'; ctx.fillRect(eroe.x + oc + (eroe.dir > 0 ? 3 : 1), eroe.y + 9, 3, 4);
+  // Particelle
+  particelle = particelle.filter((p) => p.v-- > 0);
+  for (const p of particelle) { p.x += p.vx; p.y += p.vy; p.vy += .3; ctx.fillStyle = p.col; ctx.fillRect(p.x, p.y, 4, 4); }
+  ctx.restore();
+
+  // Interfaccia
+  ctx.fillStyle = '#f6f0ff'; ctx.font = '700 20px system-ui, sans-serif';
+  ctx.fillText(`Livello ${livello + 1}/${LIVELLI.length}`, 16, 32);
+  ctx.fillText(`Punti ${punti}`, 16, 58);
+  ctx.fillText('♥'.repeat(Math.max(vite, 0)), vw - 90, 32);
+
+  if (stato === 'fine') schermata('Fine partita', `Punti ${punti}. Premi per riprovare`);
+  if (stato === 'vinto') schermata('Hai vinto!', `Punti ${punti}. Premi per rigiocare`);
+}
+
+function schermata(titolo, sotto) {
+  ctx.fillStyle = 'rgba(23,21,58,.55)'; ctx.fillRect(0, 0, vw, vh);
+  ctx.textAlign = 'center'; ctx.fillStyle = '#f6f0ff';
+  ctx.font = `800 ${Math.min(vw / 6, 96)}px system-ui, sans-serif`; ctx.fillText(titolo, vw / 2, vh / 2);
+  ctx.font = '600 20px system-ui, sans-serif'; ctx.fillStyle = '#ffd166'; ctx.fillText(sotto, vw / 2, vh / 2 + 44);
+  ctx.textAlign = 'left';
+}
+
+// Ciclo a passo fisso (60 aggiornamenti/s) indipendente dal refresh dello schermo
+let ultimo = performance.now(), accum = 0;
+function ciclo(ora) {
+  accum += Math.min(ora - ultimo, 100); ultimo = ora;
+  while (accum >= 1000 / 60) { aggiorna(); accum -= 1000 / 60; }
+  disegna();
+  requestAnimationFrame(ciclo);
+}
+requestAnimationFrame(ciclo);
+</script>
+</body>
+</html>

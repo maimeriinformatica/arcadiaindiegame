@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Corsia Cristallo</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #17153a; touch-action: none; user-select: none; -webkit-user-select: none; font-family: system-ui, sans-serif; }
+  canvas { display: block; }
+  #hud { position: fixed; top: 14px; left: 16px; right: 16px; display: flex; justify-content: space-between; color: #f6f0ff; font-weight: 700; font-size: 20px; pointer-events: none; text-shadow: 0 2px 8px #0008; }
+  #schermo { position: fixed; inset: 0; display: grid; place-content: center; text-align: center; color: #f6f0ff; background: rgba(23,21,58,.55); }
+  #schermo h1 { font-size: clamp(42px, 9vw, 96px); margin: 0 0 10px; }
+  #schermo p { color: #ffd166; font-size: 20px; margin: 4px; }
+  #schermo small { color: #b9b3e8; font-size: 15px; }
+</style>
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }</script>
+</head>
+<body>
+<div id="hud"><span id="punti">0</span><span id="cristalli">◆ 0</span></div>
+<div id="schermo"><div><h1>Corsia Cristallo</h1><p id="sotto">Premi spazio, tocca o premi A sul gamepad</p><small>Cambia corsia con frecce, swipe o stick · salta con spazio, swipe su o A</small></div></div>
+<script type="module">
+import * as THREE from 'three';
+
+const CORSIE = [-2.4, 0, 2.4];
+const scena = new THREE.Scene();
+scena.background = new THREE.Color('#2d2963');
+scena.fog = new THREE.Fog('#2d2963', 18, 70);
+
+const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 200);
+camera.position.set(0, 4.2, 7.5);
+camera.lookAt(0, 1, -6);
+
+const render = new THREE.WebGLRenderer({ antialias: true });
+render.setPixelRatio(Math.min(devicePixelRatio, 2));
+render.setSize(innerWidth, innerHeight);
+render.shadowMap.enabled = true;
+document.body.prepend(render.domElement);
+
+// Luci
+scena.add(new THREE.HemisphereLight('#b9b3e8', '#17153a', 0.9));
+const sole = new THREE.DirectionalLight('#ffb38a', 2.2);
+sole.position.set(-6, 12, 6);
+sole.castShadow = true;
+sole.shadow.mapSize.set(1024, 1024);
+Object.assign(sole.shadow.camera, { left: -10, right: 10, top: 10, bottom: -20, far: 60 });
+scena.add(sole);
+
+// Sole al tramonto sullo sfondo
+const disco = new THREE.Mesh(new THREE.CircleGeometry(9, 48), new THREE.MeshBasicMaterial({ color: '#ff7a45', fog: false }));
+disco.position.set(0, 7, -90);
+scena.add(disco);
+
+// Pista a segmenti riciclati
+const LUNG = 20, N_SEG = 6;
+const matPista = new THREE.MeshStandardMaterial({ color: '#221f4f', roughness: 0.8 });
+const matBordo = new THREE.MeshStandardMaterial({ color: '#ffd166', emissive: '#ff7a45', emissiveIntensity: 0.6 });
+const segmenti = [];
+for (let i = 0; i < N_SEG; i++) {
+  const g = new THREE.Group();
+  const p = new THREE.Mesh(new THREE.BoxGeometry(8, 0.5, LUNG), matPista);
+  p.position.y = -0.25; p.receiveShadow = true; g.add(p);
+  for (const x of [-4.1, 4.1]) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.3, LUNG), matBordo); b.position.set(x, 0.1, 0); g.add(b); }
+  for (const x of [-1.2, 1.2]) {
+    for (let z = -LUNG / 2 + 1; z < LUNG / 2; z += 4) {
+      const l = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.02, 1.6), new THREE.MeshBasicMaterial({ color: '#3b3680' }));
+      l.position.set(x, 0.01, z); g.add(l);
+    }
+  }
+  g.position.z = -i * LUNG;
+  scena.add(g); segmenti.push(g);
+}
+
+// Colonne decorative ai lati
+const matColonna = new THREE.MeshStandardMaterial({ color: '#3b3680', roughness: 0.6 });
+const colonne = [];
+for (let i = 0; i < 24; i++) {
+  const h = 2 + Math.random() * 7;
+  const c = new THREE.Mesh(new THREE.BoxGeometry(1.2, h, 1.2), matColonna);
+  c.position.set((i % 2 ? 1 : -1) * (7 + Math.random() * 6), h / 2 - 3, -i * 5);
+  scena.add(c); colonne.push(c);
+}
+
+// Giocatore: sfera luminosa
+const eroe = new THREE.Mesh(new THREE.IcosahedronGeometry(0.55, 2),
+  new THREE.MeshStandardMaterial({ color: '#ff7a45', emissive: '#ff5a1f', emissiveIntensity: 0.5, flatShading: true }));
+eroe.castShadow = true;
+scena.add(eroe);
+const alone = new THREE.PointLight('#ff7a45', 6, 6);
+scena.add(alone);
+
+// Ostacoli e cristalli
+const geoBlocco = new THREE.BoxGeometry(1.8, 1.6, 1.2);
+const geoBasso = new THREE.BoxGeometry(1.8, 0.6, 0.8);
+const matBlocco = new THREE.MeshStandardMaterial({ color: '#b9b3e8', roughness: 0.4 });
+const matBasso = new THREE.MeshStandardMaterial({ color: '#5fd3a0', roughness: 0.4 });
+const geoCristallo = new THREE.OctahedronGeometry(0.35);
+const matCristallo = new THREE.MeshStandardMaterial({ color: '#ffd166', emissive: '#ffb020', emissiveIntensity: 0.8 });
+let oggetti = [];
+
+function genera(z) {
+  const libera = Math.floor(Math.random() * 3);
+  for (let c = 0; c < 3; c++) {
+    if (c === libera) {
+      for (let k = 0; k < 4; k++) {
+        const m = new THREE.Mesh(geoCristallo, matCristallo);
+        m.position.set(CORSIE[c], 0.8, z - k * 1.6);
+        scena.add(m); oggetti.push({ m, tipo: 'cristallo', c });
+      }
+      continue;
+    }
+    const r = Math.random();
+    if (r < 0.45) {
+      const m = new THREE.Mesh(geoBlocco, matBlocco);
+      m.position.set(CORSIE[c], 0.8, z); m.castShadow = true;
+      scena.add(m); oggetti.push({ m, tipo: 'blocco', c });
+    } else if (r < 0.75) {
+      const m = new THREE.Mesh(geoBasso, matBasso);
+      m.position.set(CORSIE[c], 0.3, z); m.castShadow = true;
+      scena.add(m); oggetti.push({ m, tipo: 'basso', c });
+    }
+  }
+}
+
+// Stato
+let stato = 'titolo', vel = 14, dist = 0, cristalli = 0, corsia = 1, xVis = 0, y = 0.55, vy = 0, prossimo = -30, record = 0;
+try { record = Number(localStorage.getItem('corsia-record')) || 0; } catch {}
+const $ = (s) => document.querySelector(s);
+
+function nuovaPartita() {
+  oggetti.forEach((o) => scena.remove(o.m)); oggetti = [];
+  vel = 14; dist = 0; cristalli = 0; corsia = 1; xVis = 0; y = 0.55; vy = 0; prossimo = -30;
+  stato = 'gioco'; $('#schermo').style.display = 'none';
+}
+function fine() {
+  stato = 'fine';
+  const p = Math.floor(dist) + cristalli * 10;
+  if (p > record) { record = p; try { localStorage.setItem('corsia-record', p); } catch {} }
+  $('#schermo').querySelector('h1').textContent = `${p} punti`;
+  $('#sotto').textContent = `Record: ${record} · premi per ripartire`;
+  $('#schermo').style.display = 'grid';
+}
+
+// Comandi
+function sinistra() { if (stato === 'gioco') corsia = Math.max(0, corsia - 1); }
+function destra() { if (stato === 'gioco') corsia = Math.min(2, corsia + 1); }
+function salta() { if (stato !== 'gioco') return nuovaPartita(); if (y <= 0.56) vy = 9; }
+addEventListener('keydown', (e) => {
+  if (e.repeat) return;
+  if (['ArrowLeft', 'KeyA'].includes(e.code)) sinistra();
+  if (['ArrowRight', 'KeyD'].includes(e.code)) destra();
+  if (['ArrowUp', 'KeyW', 'Space', 'Enter'].includes(e.code)) { e.preventDefault(); salta(); }
+});
+let tocco = null;
+addEventListener('pointerdown', (e) => { tocco = { x: e.clientX, y: e.clientY }; });
+addEventListener('pointerup', (e) => {
+  if (!tocco) return;
+  const dx = e.clientX - tocco.x, dy = e.clientY - tocco.y;
+  if (Math.abs(dx) < 25 && Math.abs(dy) < 25) salta();
+  else if (Math.abs(dx) > Math.abs(dy)) (dx < 0 ? sinistra : destra)();
+  else if (dy < 0) salta();
+  tocco = null;
+});
+const padPrima = {};
+function gamepad() {
+  const p = [...(navigator.getGamepads ? navigator.getGamepads() : [])].find(Boolean);
+  if (!p) return;
+  const ora = {
+    sx: p.axes[0] < -0.5 || p.buttons[14]?.pressed, dx: p.axes[0] > 0.5 || p.buttons[15]?.pressed,
+    su: p.buttons[0]?.pressed || p.buttons[12]?.pressed || p.buttons[9]?.pressed,
+  };
+  if (ora.sx && !padPrima.sx) sinistra();
+  if (ora.dx && !padPrima.dx) destra();
+  if (ora.su && !padPrima.su) salta();
+  Object.assign(padPrima, ora);
+}
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.fov = innerWidth < innerHeight ? 80 : 62; // più campo visivo su telefono in verticale
+  camera.updateProjectionMatrix();
+  render.setSize(innerWidth, innerHeight);
+});
+dispatchEvent(new Event('resize'));
+
+const orologio = new THREE.Clock();
+function ciclo() {
+  const dt = Math.min(orologio.getDelta(), 0.05);
+  gamepad();
+  const t = orologio.elapsedTime;
+
+  if (stato === 'gioco') {
+    vel += dt * 0.35;
+    const passo = vel * dt;
+    dist += passo;
+
+    xVis += (CORSIE[corsia] - xVis) * Math.min(1, dt * 14);
+    vy -= 26 * dt; y += vy * dt;
+    if (y < 0.55) { y = 0.55; vy = 0; }
+
+    // Tutto scorre verso la camera
+    for (const s of segmenti) { s.position.z += passo; if (s.position.z > LUNG) s.position.z -= LUNG * N_SEG; }
+    for (const c of colonne) { c.position.z += passo; if (c.position.z > 10) c.position.z -= 120; }
+    prossimo += passo;
+    while (prossimo > -60) { genera(prossimo - 60); prossimo -= Math.max(9, 16 - vel * 0.2); }
+
+    for (const o of oggetti) {
+      o.m.position.z += passo;
+      if (o.tipo === 'cristallo') o.m.rotation.y += dt * 3;
+      const vicino = Math.abs(o.m.position.z) < 0.9 && Math.abs(o.m.position.x - xVis) < 1.1;
+      if (!vicino || o.preso) continue;
+      if (o.tipo === 'cristallo') { o.preso = true; cristalli++; scena.remove(o.m); }
+      else if (o.tipo === 'basso' && y > 1.1) continue;
+      else if (o.tipo !== 'cristallo') { fine(); break; }
+    }
+    oggetti = oggetti.filter((o) => { if (o.m.position.z > 8 || o.preso) { scena.remove(o.m); return false; } return true; });
+
+    $('#punti').textContent = Math.floor(dist) + cristalli * 10;
+    $('#cristalli').textContent = `◆ ${cristalli}`;
+  } else {
+    xVis += (0 - xVis) * dt * 3;
+    y = 0.55 + Math.abs(Math.sin(t * 3)) * 0.4;
+  }
+
+  eroe.position.set(xVis, y, 0);
+  eroe.rotation.x -= (stato === 'gioco' ? vel : 4) * dt;
+  alone.position.set(xVis, y + 0.8, 0.5);
+  camera.position.x += (xVis * 0.5 - camera.position.x) * dt * 4;
+  render.render(scena, camera);
+  requestAnimationFrame(ciclo);
+}
+ciclo();
+</script>
+</body>
+</html>

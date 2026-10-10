@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="it" data-nome="{{NOME}}" data-ditta="{{DITTA}}" data-piva="{{DITTA_PIVA}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Il mio account – {{NOME}}</title>
+<link rel="icon" href="/img/icona.svg">
+<link rel="stylesheet" href="/css/stile.css">
+</head>
+<body>
+<main>
+  <h1 id="ciao">Il mio account</h1>
+  <div class="due-col">
+    <section class="pannello">
+      <h2>Abbonamento</h2>
+      <div id="stato"></div>
+      <div class="avviso" id="msg-abb" role="alert"></div>
+    </section>
+    <section class="pannello">
+      <h2>Cambia password</h2>
+      <form id="pw">
+        <label for="attuale">Password attuale</label>
+        <input type="password" id="attuale" autocomplete="current-password" required>
+        <label for="nuova">Nuova password</label>
+        <input type="password" id="nuova" autocomplete="new-password" minlength="8" required>
+        <div class="avviso" id="msg-pw" role="alert"></div>
+        <div class="riga-azioni"><button class="btn">Salva la nuova password</button></div>
+      </form>
+      <div class="riga-azioni" style="justify-content:flex-start;margin-top:30px">
+        <button class="btn secondario" id="esci">Esci dall'account</button></div>
+    </section>
+  </div>
+  <h2 style="margin-top:40px">I miei preferiti</h2>
+  <div class="scaffale" id="preferiti"></div>
+</main>
+<script src="/js/comune.js"></script>
+<script>
+(async () => {
+  const io = await testata();
+  if (!io.utente) { location.href = '/accedi.html?dopo=/account.html'; return; }
+  $('#ciao').textContent = io.utente.nome ? `Ciao, ${io.utente.nome}` : 'Il mio account';
+
+  const a = io.accesso;
+  const st = $('#stato');
+  const abb = a.abbonamento;
+  if (a.motivo === 'admin') st.innerHTML = '<p><span class="badge si">Amministratore</span></p><p>Hai accesso a tutti i giochi.</p>';
+  else if (a.motivo === 'omaggio') st.innerHTML = `<p><span class="badge si">Accesso omaggio</span></p><p>Valido fino al ${data(a.fino)}.</p>`;
+  else if (a.motivo === 'abbonato') {
+    st.innerHTML = `<p><span class="badge si">Attivo</span></p>
+      <p>Prossimo rinnovo: <b>${data(abb.valido_fino)}</b> ({{PREZZO}} € con PayPal).</p>
+      <button class="btn pericolo" id="disdici">Disdici l'abbonamento</button>
+      <p class="muted piccolo" style="margin-top:12px">Dopo la disdetta continui a giocare fino al ${data(abb.valido_fino)}. Nessun altro addebito.</p>`;
+    $('#disdici').onclick = async () => {
+      if (!confirm('Vuoi davvero disdire? Potrai giocare fino alla fine del mese già pagato.')) return;
+      try {
+        const r = await api('/abbonamento/disdici', { method: 'POST' });
+        messaggio($('#msg-abb'), `Abbonamento disdetto. Puoi giocare fino al ${data(r.valido_fino)}.`, 'ok');
+        $('#disdici').remove();
+      } catch (e) { messaggio($('#msg-abb'), e.message); }
+    };
+  } else if (a.motivo === 'disdetto') {
+    st.innerHTML = `<p><span class="badge forse">Disdetto</span></p><p>Puoi giocare fino al <b>${data(a.fino)}</b>, poi l'accesso si chiude.</p>
+      <a class="btn" href="/abbonati.html">Riattiva l'abbonamento</a>`;
+  } else {
+    st.innerHTML = `<p><span class="badge no">Non attivo</span></p><p>Con {{PREZZO}} € al mese giochi a tutto il catalogo.</p>
+      <a class="btn" href="/abbonati.html">Abbonati</a>`;
+  }
+
+  $('#pw').onsubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await api('/cambia-password', { method: 'POST', body: { attuale: $('#attuale').value, nuova: $('#nuova').value } });
+      messaggio($('#msg-pw'), 'Password aggiornata.', 'ok'); e.target.reset();
+    } catch (err) { messaggio($('#msg-pw'), err.message); }
+  };
+  $('#esci').onclick = async () => { await api('/esci', { method: 'POST' }); location.href = '/'; };
+
+  const { giochi } = await api('/giochi');
+  const pref = giochi.filter((g) => g.preferito);
+  $('#preferiti').innerHTML = pref.length ? pref.map((g) => `
+    <a class="gioco" href="/gioco.html?slug=${encodeURIComponent(g.slug)}">
+      <div class="cop"><img src="${urlCopertina(g)}" alt="" loading="lazy"></div>
+      <h3>${esc(g.titolo)}</h3><p>${esc(g.sottotitolo)}</p></a>`).join('')
+    : '<p class="muted">Nessun preferito. Dalla scheda di un gioco puoi aggiungerlo qui.</p>';
+})();
+</script>
+</body>
+</html>

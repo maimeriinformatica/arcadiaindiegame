@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="it" data-nome="{{NOME}}" data-ditta="{{DITTA}}" data-piva="{{DITTA_PIVA}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Abbonati – {{NOME}}</title>
+<link rel="icon" href="/img/icona.svg">
+<link rel="stylesheet" href="/css/stile.css">
+</head>
+<body>
+<main>
+  <div class="pannello stretto" style="max-width:540px">
+    <h1>Tutti i giochi, {{PREZZO}} € al mese</h1>
+    <div class="prezzo"><b>{{PREZZO}} €</b><span class="muted">al mese, IVA inclusa</span></div>
+    <ul class="lista-vantaggi">
+      <li>Accesso a tutto il catalogo, compresi i giochi nuovi appena pubblicati</li>
+      <li>Si gioca nel browser su PC, telefono, tablet e smart TV</li>
+      <li>Rinnovo automatico ogni mese con PayPal, disdici quando vuoi</li>
+      <li>Se disdici, continui a giocare fino alla fine del mese già pagato</li>
+    </ul>
+    <div id="area"><p class="muted">Caricamento…</p></div>
+    <div class="avviso" id="msg" role="alert"></div>
+  </div>
+</main>
+<script src="/js/comune.js"></script>
+<script>
+(async () => {
+  const io = await testata();
+  const cfg = await api('/config');
+  const area = $('#area');
+  const gioco = parametro('gioco');
+  const dopo = gioco ? `/gioca.html?slug=${encodeURIComponent(gioco)}` : '/';
+  const qui = location.pathname + location.search;
+
+  if (!io.utente) {
+    area.innerHTML = `<p>Per abbonarti serve un account: così il tuo abbonamento resta legato a te su ogni dispositivo.</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <a class="btn grande" href="/accedi.html?modo=registrati&dopo=${encodeURIComponent(qui)}">Crea un account</a>
+        <a class="btn secondario grande" href="/accedi.html?dopo=${encodeURIComponent(qui)}">Ho già un account</a></div>`;
+    return;
+  }
+  if (io.accesso.accesso) {
+    const fino = io.accesso.fino ? ` fino al ${data(io.accesso.fino)}` : '';
+    area.innerHTML = `<div class="avviso ok">Hai già accesso a tutti i giochi${fino}.</div>
+      <a class="btn grande" href="${dopo}">${gioco ? 'Gioca ora' : 'Vai ai giochi'}</a>`;
+    return;
+  }
+  if (!cfg.paypal.configurato) {
+    area.innerHTML = '<div class="avviso">I pagamenti non sono ancora attivi. Torna tra poco.</div>';
+    return;
+  }
+
+  area.innerHTML = `
+    <label class="spunta"><input type="checkbox" id="consenso">
+      <span>Chiedo di poter giocare subito e accetto che, trattandosi di contenuti digitali, perdo il diritto di recesso di 14 giorni una volta iniziata la fornitura. Ho letto i <a href="/termini.html" target="_blank">termini</a>.</span></label>
+    <p class="muted piccolo" id="nota">Spunta la casella per attivare il pagamento.</p>
+    <div id="pulsanti-paypal" style="opacity:.4;pointer-events:none"></div>`;
+  const box = $('#pulsanti-paypal');
+  $('#consenso').onchange = (e) => {
+    box.style.opacity = e.target.checked ? 1 : .4;
+    box.style.pointerEvents = e.target.checked ? 'auto' : 'none';
+    $('#nota').hidden = e.target.checked;
+  };
+
+  async function conferma(subscriptionID) {
+    messaggio($('#msg'), 'Pagamento ricevuto, sto attivando l\'abbonamento…', '');
+    for (let i = 0; i < 5; i++) {
+      try {
+        const r = await api('/abbonamento/attiva', { method: 'POST', body: { subscriptionID } });
+        if (r.accesso) { messaggio($('#msg'), 'Abbonamento attivo. Buon divertimento!', 'ok'); setTimeout(() => location.href = dopo, 1200); return; }
+      } catch (e) { if (i === 4) { messaggio($('#msg'), e.message); return; } }
+      await new Promise((r) => setTimeout(r, 2500)); // PayPal può impiegare qualche secondo ad attivarlo
+    }
+    messaggio($('#msg'), 'PayPal sta ancora elaborando l\'abbonamento. Ricarica la pagina tra un minuto.', '');
+  }
+
+  if (cfg.paypal.simulato) {
+    box.innerHTML = '<button class="btn grande" style="width:100%" id="simula">Paga con PayPal (simulazione di prova)</button>';
+    $('#simula').onclick = async () => {
+      const r = await api('/abbonamento/simula', { method: 'POST' });
+      conferma(r.subscriptionID);
+    };
+    return;
+  }
+
+  const s = document.createElement('script');
+  s.src = `https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(cfg.paypal.clientId)}&vault=true&intent=subscription&currency=EUR&locale=it_IT&components=buttons`;
+  s.dataset.sdkIntegrationSource = 'button-factory';
+  s.onerror = () => messaggio($('#msg'), 'Non riesco a caricare PayPal. Controlla la connessione o disattiva il blocco pubblicità.');
+  s.onload = () => {
+    paypal.Buttons({
+      style: { shape: 'rect', color: 'gold', layout: 'vertical', label: 'subscribe' },
+      createSubscription: (_d, actions) => actions.subscription.create({
+        plan_id: cfg.paypal.pianoId,
+        custom_id: String(io.utente.id),
+        application_context: { brand_name: cfg.nome, shipping_preference: 'NO_SHIPPING', locale: 'it-IT' },
+      }),
+      onApprove: (d) => conferma(d.subscriptionID),
+      onCancel: () => messaggio($('#msg'), 'Pagamento annullato. Nessun addebito.', ''),
+      onError: (err) => { console.error(err); messaggio($('#msg'), 'PayPal ha segnalato un errore. Riprova tra poco.'); },
+    }).render('#pulsanti-paypal');
+  };
+  document.head.append(s);
+})();
+</script>
+</body>
+</html>

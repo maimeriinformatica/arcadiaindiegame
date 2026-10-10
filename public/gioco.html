@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="it" data-nome="{{NOME}}" data-ditta="{{DITTA}}" data-piva="{{DITTA_PIVA}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gioco – {{NOME}}</title>
+<link rel="icon" href="/img/icona.svg">
+<link rel="stylesheet" href="/css/stile.css">
+</head>
+<body>
+<main>
+  <p><a href="/">Torna al catalogo</a></p>
+  <div id="scheda"><p class="muted">Caricamento…</p></div>
+</main>
+<script src="/js/comune.js"></script>
+<script>
+(async () => {
+  await testata();
+  const slug = parametro('slug');
+  const box = $('#scheda');
+  let d;
+  try { d = await api(`/giochi/${encodeURIComponent(slug)}`); }
+  catch (e) { box.innerHTML = `<div class="avviso errore">${esc(e.message)}</div>`; return; }
+  const g = d.gioco;
+  document.title = `${g.titolo} – ${NOME}`;
+
+  const azione = d.puoGiocare
+    ? `<a class="btn grande" href="/gioca.html?slug=${encodeURIComponent(g.slug)}">Gioca ora</a>`
+    : `<a class="btn grande" href="/abbonati.html?gioco=${encodeURIComponent(g.slug)}">Abbonati per giocare – {{PREZZO}} €/mese</a>`;
+
+  box.innerHTML = `
+    <div class="scheda">
+      <div>
+        <div class="cop"><img src="${urlCopertina(g)}" alt="Copertina di ${esc(g.titolo)}" width="800" height="500"></div>
+        ${g.descrizione ? `<h2 style="margin-top:28px">Il gioco</h2><p class="testo">${esc(g.descrizione)}</p>` : ''}
+      </div>
+      <div>
+        <h1>${esc(g.titolo)}</h1>
+        <p>${esc(g.sottotitolo)}</p>
+        <div class="dati">
+          <span>${esc(g.categoria)}</span>
+          ${g.autore ? `<span>di ${esc(g.autore)}</span>` : ''}
+          <span>${g.partite} partite</span>
+          ${g.gratuito ? '<span class="badge si">Gratis per tutti</span>' : ''}
+          ${!g.pubblicato ? '<span class="badge forse">Non pubblicato</span>' : ''}
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">${azione}
+          ${d.loggato ? `<button class="btn secondario grande" id="pref">Aggiungi ai preferiti</button>` : ''}</div>
+        ${g.comandi ? `<h3 style="margin-top:28px">Comandi</h3><div class="comandi">${esc(g.comandi)}</div>` : ''}
+        <p class="muted piccolo" style="margin-top:18px">Si gioca nel browser: PC, telefono, tablet e smart TV. Il gamepad funziona se il gioco lo supporta.</p>
+      </div>
+    </div>`;
+
+  const pref = $('#pref');
+  if (pref) {
+    const { giochi } = await api('/giochi');
+    const aggiorna = (on) => { pref.textContent = on ? 'Nei preferiti' : 'Aggiungi ai preferiti'; pref.setAttribute('aria-pressed', on); };
+    aggiorna((giochi.find((x) => x.slug === g.slug) || {}).preferito);
+    pref.onclick = async () => aggiorna((await api(`/giochi/${encodeURIComponent(g.slug)}/preferito`, { method: 'POST' })).preferito);
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="it" data-nome="{{NOME}}" data-ditta="{{DITTA}}" data-piva="{{DITTA_PIVA}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gestione – {{NOME}}</title>
+<link rel="icon" href="/img/icona.svg">
+<link rel="stylesheet" href="/css/stile.css">
+</head>
+<body>
+<main>
+  <h1>Gestione della piattaforma</h1>
+  <div class="stati" id="stati"></div>
+
+  <div class="schede" role="tablist">
+    <button role="tab" aria-selected="true" data-t="giochi">Giochi</button>
+    <button role="tab" aria-selected="false" data-t="utenti">Utenti e abbonati</button>
+  </div>
+
+  <section id="t-giochi">
+    <div class="riga-azioni" style="justify-content:space-between;margin:0 0 16px">
+      <p class="muted" style="margin:0">Carica lo ZIP della build web del gioco (Three.js, Unity WebGL, Godot, Phaser, GDevelop, Construct…). Deve contenere un <b>index.html</b>.</p>
+      <button class="btn" id="nuovo">Aggiungi un gioco</button>
+    </div>
+    <div class="tabella-wrap"><table>
+      <thead><tr><th></th><th>Titolo</th><th>Categoria</th><th>Stato</th><th>Partite</th><th></th></tr></thead>
+      <tbody id="lista-giochi"></tbody>
+    </table></div>
+  </section>
+
+  <section id="t-utenti" hidden>
+    <input type="search" id="cerca-utenti" placeholder="Cerca per email o nome" style="max-width:360px;margin-bottom:16px" aria-label="Cerca utenti">
+    <div class="tabella-wrap"><table>
+      <thead><tr><th>Utente</th><th>Iscritto</th><th>Abbonamento</th><th>Valido fino</th><th></th></tr></thead>
+      <tbody id="lista-utenti"></tbody>
+    </table></div>
+  </section>
+</main>
+
+<dialog id="dlg">
+  <form id="form-gioco" enctype="multipart/form-data">
+    <h2 id="dlg-titolo">Nuovo gioco</h2>
+    <input type="hidden" name="id">
+    <div class="griglia2">
+      <div><label for="f-titolo">Titolo</label><input type="text" id="f-titolo" name="titolo" required maxlength="100"></div>
+      <div><label for="f-categoria">Categoria</label><select id="f-categoria" name="categoria"></select></div>
+    </div>
+    <label for="f-sotto">Frase di presentazione</label>
+    <input type="text" id="f-sotto" name="sottotitolo" maxlength="160" placeholder="Una riga che fa venire voglia di giocare">
+    <label for="f-descr">Descrizione</label>
+    <textarea id="f-descr" name="descrizione" maxlength="5000"></textarea>
+    <label for="f-comandi">Comandi</label>
+    <textarea id="f-comandi" name="comandi" style="min-height:70px" placeholder="Frecce / WASD: muoviti&#10;Spazio: salta&#10;Gamepad: stick sinistro e tasto A"></textarea>
+    <div class="griglia2">
+      <div><label for="f-autore">Autore / studio</label><input type="text" id="f-autore" name="autore" maxlength="100"></div>
+      <div><label for="f-avvio">File di avvio</label><input type="text" id="f-avvio" name="file_avvio" value="index.html"></div>
+    </div>
+    <div class="griglia2">
+      <div><label for="f-zip">Pacchetto del gioco (.zip)</label><input type="file" id="f-zip" name="pacchetto" accept=".zip,application/zip"></div>
+      <div><label for="f-cop">Copertina (16:10, es. 1600×1000)</label><input type="file" id="f-cop" name="copertina" accept="image/*"></div>
+    </div>
+    <p class="muted piccolo" id="nota-zip"></p>
+    <label class="spunta"><input type="checkbox" name="pubblicato" value="1"> Pubblicato nel catalogo</label>
+    <label class="spunta"><input type="checkbox" name="gratuito" value="1"> Gratis per tutti (anche senza abbonamento)</label>
+    <label class="spunta"><input type="checkbox" name="in_evidenza" value="1"> In evidenza in home page</label>
+    <progress id="avanz" max="100" value="0" hidden style="width:100%;margin-top:14px"></progress>
+    <div class="avviso" id="msg-gioco" role="alert"></div>
+    <div class="riga-azioni">
+      <button type="button" class="btn secondario" id="annulla">Annulla</button>
+      <button class="btn" id="salva">Salva il gioco</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="/js/comune.js"></script>
+<script>
+(async () => {
+  const io = await testata();
+  if (!io.utente || !io.utente.admin) { location.href = '/accedi.html?dopo=/admin.html'; return; }
+
+  let info;
+  async function stato() {
+    info = await api('/admin/stato');
+    const mese = (info.attivi * parseFloat(info.prezzo)).toFixed(2).replace('.', ',');
+    $('#stati').innerHTML = `
+      <div><b>${info.attivi}</b><span>abbonati attivi</span></div>
+      <div><b>${mese} €</b><span>incasso mensile lordo</span></div>
+      <div><b>${info.utenti}</b><span>utenti registrati</span></div>
+      <div><b>${info.pubblicati}/${info.giochi}</b><span>giochi pubblicati</span></div>
+      <div><b>${info.partite}</b><span>partite avviate</span></div>
+      ${info.paypal.simulato ? '<div><b style="color:var(--giallo)">Prova</b><span>PayPal simulato</span></div>'
+        : `<div><b>${info.paypal.ambiente === 'live' ? 'Reale' : 'Sandbox'}</b><span>modalità PayPal</span></div>`}`;
+    $('#f-categoria').innerHTML = info.categorie.map((c) => `<option>${c}</option>`).join('');
+  }
+  await stato();
+
+  document.querySelectorAll('[role=tab]').forEach((t) => t.onclick = () => {
+    document.querySelectorAll('[role=tab]').forEach((x) => x.setAttribute('aria-selected', x === t));
+    $('#t-giochi').hidden = t.dataset.t !== 'giochi';
+    $('#t-utenti').hidden = t.dataset.t !== 'utenti';
+    if (t.dataset.t === 'utenti') utenti();
+  });
+
+  // ---------- Giochi ----------
+  let giochi = [];
+  async function carica() {
+    giochi = (await api('/giochi?tutti=1')).giochi;
+    $('#lista-giochi').innerHTML = giochi.map((g) => `
+      <tr>
+        <td><img src="${urlCopertina(g)}" alt=""></td>
+        <td><b>${esc(g.titolo)}</b><br><span class="muted piccolo">${esc(g.slug)} · v${g.versione}</span></td>
+        <td>${esc(g.categoria)}</td>
+        <td>${g.pubblicato ? '<span class="badge si">Pubblicato</span>' : '<span class="badge">Bozza</span>'}
+            ${g.gratuito ? '<span class="badge forse">Gratis</span>' : ''} ${g.in_evidenza ? '<span class="badge">In evidenza</span>' : ''}</td>
+        <td>${g.partite}</td>
+        <td style="white-space:nowrap">
+          <a class="btn piccolo secondario" href="/gioca.html?slug=${encodeURIComponent(g.slug)}" target="_blank">Prova</a>
+          <button class="btn piccolo secondario" data-mod="${g.id}">Modifica</button>
+          <button class="btn piccolo pericolo" data-del="${g.id}">Elimina</button></td>
+      </tr>`).join('') || '<tr><td colspan="6" class="muted">Nessun gioco. Aggiungi il primo.</td></tr>';
+  }
+  await carica();
+
+  const dlg = $('#dlg'), form = $('#form-gioco');
+  function apri(g) {
+    form.reset();
+    messaggio($('#msg-gioco'), '');
+    form.id.value = g ? g.id : '';
+    $('#dlg-titolo').textContent = g ? `Modifica: ${g.titolo}` : 'Nuovo gioco';
+    $('#nota-zip').textContent = g ? 'Lascia vuoti i file per mantenere quelli attuali. Un nuovo ZIP sostituisce la versione pubblicata.' : 'Lo ZIP è obbligatorio per un gioco nuovo.';
+    if (g) {
+      form.titolo.value = g.titolo; form.categoria.value = g.categoria; form.sottotitolo.value = g.sottotitolo;
+      form.descrizione.value = g.descrizione; form.comandi.value = g.comandi; form.autore.value = g.autore;
+      form.file_avvio.value = g.file_avvio || 'index.html';
+      form.pubblicato.checked = g.pubblicato; form.gratuito.checked = g.gratuito; form.in_evidenza.checked = g.in_evidenza;
+    }
+    dlg.showModal();
+  }
+  $('#nuovo').onclick = () => apri(null);
+  $('#annulla').onclick = () => dlg.close();
+
+  $('#lista-giochi').onclick = async (e) => {
+    const m = e.target.closest('[data-mod]'), d = e.target.closest('[data-del]');
+    if (m) apri(giochi.find((g) => g.id == m.dataset.mod));
+    if (d) {
+      const g = giochi.find((x) => x.id == d.dataset.del);
+      if (!confirm(`Eliminare definitivamente "${g.titolo}" e tutti i suoi file?`)) return;
+      await api(`/admin/giochi/${g.id}`, { method: 'DELETE' });
+      await carica(); stato();
+    }
+  };
+
+  form.onsubmit = (e) => {
+    e.preventDefault();
+    const id = form.id.value;
+    const fd = new FormData(form);
+    ['pubblicato', 'gratuito', 'in_evidenza'].forEach((k) => fd.set(k, form[k].checked ? '1' : '0'));
+    if (!id && !form.pacchetto.files.length) return messaggio($('#msg-gioco'), 'Carica lo ZIP del gioco.');
+    const xhr = new XMLHttpRequest();
+    const bar = $('#avanz');
+    bar.hidden = false; bar.value = 0; $('#salva').disabled = true;
+    messaggio($('#msg-gioco'), 'Caricamento in corso…', '');
+    xhr.upload.onprogress = (ev) => { if (ev.lengthComputable) bar.value = ev.loaded / ev.total * 100; };
+    xhr.upload.onload = () => messaggio($('#msg-gioco'), 'File ricevuto, sto estraendo e pubblicando il gioco…', '');
+    xhr.onload = async () => {
+      $('#salva').disabled = false; bar.hidden = true;
+      let r = {}; try { r = JSON.parse(xhr.responseText); } catch {}
+      if (xhr.status >= 400) return messaggio($('#msg-gioco'), r.errore || `Errore ${xhr.status}`);
+      dlg.close(); await carica(); stato();
+    };
+    xhr.onerror = () => { $('#salva').disabled = false; bar.hidden = true; messaggio($('#msg-gioco'), 'Connessione interrotta durante il caricamento.'); };
+    xhr.open(id ? 'PUT' : 'POST', id ? `/api/admin/giochi/${id}` : '/api/admin/giochi');
+    xhr.send(fd);
+  };
+
+  // ---------- Utenti ----------
+  let tUtenti;
+  $('#cerca-utenti').oninput = () => { clearTimeout(tUtenti); tUtenti = setTimeout(utenti, 250); };
+  async function utenti() {
+    const { utenti } = await api(`/admin/utenti?cerca=${encodeURIComponent($('#cerca-utenti').value)}`);
+    $('#lista-utenti').innerHTML = utenti.map((u) => {
+      const omaggio = u.omaggio_fino && new Date(u.omaggio_fino) > new Date();
+      let badge = '<span class="badge">Nessuno</span>';
+      if (u.stato === 'ACTIVE') badge = '<span class="badge si">Attivo</span>';
+      else if (u.stato === 'CANCELLED') badge = new Date(u.valido_fino) > new Date() ? '<span class="badge forse">Disdetto</span>' : '<span class="badge no">Scaduto</span>';
+      else if (u.stato) badge = `<span class="badge no">${esc(u.stato)}</span>`;
+      return `<tr>
+        <td><b>${esc(u.email)}</b>${u.nome ? `<br><span class="muted piccolo">${esc(u.nome)}</span>` : ''}
+          ${u.is_admin ? ' <span class="badge">Admin</span>' : ''}</td>
+        <td>${data(u.creato_il)}</td>
+        <td>${badge} ${omaggio ? `<span class="badge si">Omaggio fino al ${data(u.omaggio_fino)}</span>` : ''}</td>
+        <td>${data(u.valido_fino)}</td>
+        <td style="white-space:nowrap">
+          <button class="btn piccolo secondario" data-a="omaggio" data-id="${u.id}">Omaggio</button>
+          <button class="btn piccolo secondario" data-a="password" data-id="${u.id}">Nuova password</button>
+          ${u.paypal_id ? `<button class="btn piccolo secondario" data-a="sincronizza" data-id="${u.id}" title="Rilegge lo stato da PayPal">Aggiorna da PayPal</button>` : ''}
+          ${u.id !== io.utente.id ? `<button class="btn piccolo secondario" data-a="admin" data-v="${u.is_admin ? 0 : 1}" data-id="${u.id}">${u.is_admin ? 'Togli admin' : 'Rendi admin'}</button>` : ''}
+        </td></tr>`;
+    }).join('') || '<tr><td colspan="5" class="muted">Nessun utente trovato.</td></tr>';
+  }
+  $('#lista-utenti').onclick = async (e) => {
+    const b = e.target.closest('[data-a]'); if (!b) return;
+    const id = b.dataset.id;
+    try {
+      if (b.dataset.a === 'omaggio') {
+        const g = prompt('Per quanti giorni dare accesso gratuito? (0 per togliere l\'omaggio)', '30');
+        if (g === null) return;
+        await api(`/admin/utenti/${id}/omaggio`, { method: 'POST', body: { giorni: Number(g) } });
+      } else if (b.dataset.a === 'password') {
+        const p = prompt('Nuova password per questo utente (almeno 8 caratteri). Comunicagliela tu.');
+        if (!p) return;
+        await api(`/admin/utenti/${id}/password`, { method: 'POST', body: { password: p } });
+        alert('Password aggiornata.');
+      } else if (b.dataset.a === 'sincronizza') {
+        await api(`/admin/utenti/${id}/sincronizza`, { method: 'POST' });
+      } else if (b.dataset.a === 'admin') {
+        if (!confirm('Confermi il cambio di ruolo?')) return;
+        await api(`/admin/utenti/${id}/admin`, { method: 'POST', body: { admin: b.dataset.v === '1' } });
+      }
+      utenti(); stato();
+    } catch (err) { alert(err.message); }
+  };
+})();
+</script>
+</body>
+</html>

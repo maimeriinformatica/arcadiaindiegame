@@ -1,0 +1,10 @@
+{
+  "titolo": "Corsia Cristallo",
+  "categoria": "3D",
+  "sottotitolo": "Una corsa senza fine verso il sole: schiva, salta, raccogli.",
+  "descrizione": "Guidi una sfera incandescente lungo una pista sospesa nel cielo del tramonto. Cambia corsia per evitare i blocchi, salta le barriere verdi e raccogli i cristalli dorati: ognuno vale 10 punti.\n\nLa velocità cresce di continuo. Quanto lontano arrivi?",
+  "comandi": "Frecce sinistra/destra o A / D: cambia corsia\nSpazio o freccia su: salta\nTelefono: scorri a sinistra/destra, scorri in su o tocca per saltare\nGamepad: stick o croce per la corsia, tasto A per saltare",
+  "autore": "Studio interno",
+  "gratuito": false,
+  "in_evidenza": true
+}

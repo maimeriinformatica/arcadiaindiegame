@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="it" data-nome="{{NOME}}" data-ditta="{{DITTA}}" data-piva="{{DITTA_PIVA}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{NOME}} – giochi indipendenti a {{PREZZO}} € al mese</title>
+<meta name="description" content="Giochi 3D, platform e arcade indipendenti da giocare nel browser, su PC, telefono e TV. Tutto il catalogo a {{PREZZO}} € al mese.">
+<link rel="icon" href="/img/icona.svg">
+<link rel="stylesheet" href="/css/stile.css">
+</head>
+<body>
+<main>
+  <section class="vetrina" id="vetrina" hidden></section>
+
+  <h2 id="titolo-catalogo">Tutti i giochi</h2>
+  <div class="filtri" role="group" aria-labelledby="titolo-catalogo">
+    <div id="chips" style="display:contents"></div>
+    <input type="search" id="cerca" placeholder="Cerca un gioco" aria-label="Cerca un gioco">
+  </div>
+  <div class="scaffale" id="scaffale" aria-live="polite"></div>
+  <p class="vuoto" id="vuoto" hidden>Nessun gioco corrisponde alla ricerca.</p>
+</main>
+
+<script src="/js/comune.js"></script>
+<script>
+(async () => {
+  const io = await testata();
+  const { giochi } = await api('/giochi');
+  const abbonato = io.accesso && io.accesso.accesso;
+
+  // Vetrina: il primo gioco in evidenza (o il più recente)
+  const top = giochi.find((g) => g.in_evidenza) || giochi[0];
+  if (top) {
+    const v = $('#vetrina');
+    v.hidden = false;
+    v.innerHTML = `
+      <a class="copertina-grande" href="/gioco.html?slug=${encodeURIComponent(top.slug)}" aria-label="${esc(top.titolo)}">
+        <img src="${urlCopertina(top)}" alt="" width="800" height="500"></a>
+      <div>
+        <p class="muted">${esc(top.categoria)}${top.autore ? ' – di ' + esc(top.autore) : ''}</p>
+        <h1>${esc(top.titolo)}</h1>
+        <p>${esc(top.sottotitolo)}</p>
+        <div class="azioni">
+          ${(abbonato || top.gratuito)
+            ? `<a class="btn grande" href="/gioca.html?slug=${encodeURIComponent(top.slug)}">Gioca ora</a>`
+            : `<a class="btn grande" href="/abbonati.html?gioco=${encodeURIComponent(top.slug)}">Gioca con l'abbonamento a {{PREZZO}} €/mese</a>`}
+          <a class="btn secondario grande" href="/gioco.html?slug=${encodeURIComponent(top.slug)}">Scheda del gioco</a>
+        </div>
+        ${!abbonato ? '<p class="muted piccolo" style="margin-top:14px">Un abbonamento, tutto il catalogo. Disdici quando vuoi da PayPal o dal tuo account.</p>' : ''}
+      </div>`;
+  }
+
+  const categorie = ['Tutti', ...new Set(giochi.map((g) => g.categoria))];
+  let scelta = 'Tutti';
+  const chips = $('#chips');
+  chips.innerHTML = categorie.map((c) => `<button class="chip" aria-pressed="${c === scelta}" data-c="${esc(c)}">${esc(c)}</button>`).join('');
+  chips.addEventListener('click', (e) => {
+    const b = e.target.closest('.chip'); if (!b) return;
+    scelta = b.dataset.c;
+    chips.querySelectorAll('.chip').forEach((x) => x.setAttribute('aria-pressed', x === b));
+    disegna();
+  });
+  $('#cerca').addEventListener('input', disegna);
+
+  function disegna() {
+    const t = $('#cerca').value.trim().toLowerCase();
+    const lista = giochi.filter((g) => (scelta === 'Tutti' || g.categoria === scelta)
+      && (!t || `${g.titolo} ${g.sottotitolo} ${g.autore}`.toLowerCase().includes(t)));
+    $('#scaffale').innerHTML = lista.map((g) => `
+      <a class="gioco" href="/gioco.html?slug=${encodeURIComponent(g.slug)}">
+        <div class="cop"><img src="${urlCopertina(g)}" alt="" loading="lazy" width="400" height="250">
+          <span class="etichetta">${esc(g.categoria)}</span>
+          ${g.gratuito ? '<span class="etichetta gratis">Gratis</span>' : ''}</div>
+        <h3>${esc(g.titolo)}</h3><p>${esc(g.sottotitolo)}</p>
+      </a>`).join('');
+    $('#vuoto').hidden = lista.length > 0;
+    if (!giochi.length) $('#vuoto').textContent = 'Il catalogo è ancora vuoto: i primi giochi arrivano a breve.';
+  }
+  disegna();
+})();
+</script>
+</body>
+</html>
