@@ -6,6 +6,14 @@
 <title>Gestione – {{NOME}}</title>
 <link rel="icon" href="/img/icona.svg">
 <link rel="stylesheet" href="/css/stile.css">
+<style>
+  .zona-zip { display: flex; gap: 14px; align-items: center; margin: 4px 0 6px; padding: 16px; border: 2px dashed var(--bordo); border-radius: 14px; cursor: pointer; font-weight: 400; }
+  .zona-zip:hover, .zona-zip.sopra { border-color: var(--giallo); background: rgb(255 209 102 / .06); }
+  .zona-zip input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  .zona-zip:focus-within { outline: 3px solid var(--giallo); outline-offset: 2px; }
+  .zona-zip img { width: 128px; aspect-ratio: 16/10; object-fit: cover; border-radius: 8px; flex: none; }
+  body.trascina main { outline: 3px dashed var(--giallo); outline-offset: 8px; border-radius: 12px; }
+</style>
 </head>
 <body>
 <main>
@@ -19,7 +27,7 @@
 
   <section id="t-giochi">
     <div class="riga-azioni" style="justify-content:space-between;margin:0 0 16px">
-      <p class="muted" style="margin:0">Carica lo ZIP della build web del gioco (Three.js, Unity WebGL, Godot, Phaser, GDevelop, Construct…). Deve contenere un <b>index.html</b>.</p>
+      <p class="muted" style="margin:0">Trascina qui lo ZIP di un gioco, oppure usa il pulsante. Lo ZIP deve contenere <b>index.html</b>; con <b>gioco.json</b> e <b>copertina.png</b> titolo, descrizioni, comandi e immagine si compilano da soli. <a href="/modello-gioco.json" download>Scarica il modello gioco.json</a></p>
       <button class="btn" id="nuovo">Aggiungi un gioco</button>
     </div>
     <div class="tabella-wrap"><table>
@@ -41,8 +49,15 @@
   <form id="form-gioco" enctype="multipart/form-data">
     <h2 id="dlg-titolo">Nuovo gioco</h2>
     <input type="hidden" name="id">
+    <label class="zona-zip" id="zona-zip" for="f-zip">
+      <input type="file" id="f-zip" name="pacchetto" accept=".zip,application/zip">
+      <img id="anteprima-cop" alt="" hidden>
+      <span><b id="zip-titolo">Trascina qui lo ZIP del gioco</b><br>
+      <span class="muted piccolo" id="zip-stato">oppure clicca per sceglierlo. Se dentro c'è <b>gioco.json</b> con la copertina, il modulo si compila da solo.</span></span>
+    </label>
+    <p class="muted piccolo" id="nota-zip"></p>
     <div class="griglia2">
-      <div><label for="f-titolo">Titolo</label><input type="text" id="f-titolo" name="titolo" required maxlength="100"></div>
+      <div><label for="f-titolo">Titolo</label><input type="text" id="f-titolo" name="titolo" maxlength="100"></div>
       <div><label for="f-categoria">Categoria</label><select id="f-categoria" name="categoria"></select></div>
     </div>
     <label for="f-sotto">Frase di presentazione</label>
@@ -55,11 +70,8 @@
       <div><label for="f-autore">Autore / studio</label><input type="text" id="f-autore" name="autore" maxlength="100"></div>
       <div><label for="f-avvio">File di avvio</label><input type="text" id="f-avvio" name="file_avvio" value="index.html"></div>
     </div>
-    <div class="griglia2">
-      <div><label for="f-zip">Pacchetto del gioco (.zip)</label><input type="file" id="f-zip" name="pacchetto" accept=".zip,application/zip"></div>
-      <div><label for="f-cop">Copertina (16:10, es. 1600×1000)</label><input type="file" id="f-cop" name="copertina" accept="image/*"></div>
-    </div>
-    <p class="muted piccolo" id="nota-zip"></p>
+    <label for="f-cop">Copertina diversa da quella nello ZIP (facoltativa, 16:10)</label>
+    <input type="file" id="f-cop" name="copertina" accept="image/*">
     <label class="spunta"><input type="checkbox" name="pubblicato" value="1"> Pubblicato nel catalogo</label>
     <label class="spunta"><input type="checkbox" name="gratuito" value="1"> Gratis per tutti (anche senza abbonamento)</label>
     <label class="spunta"><input type="checkbox" name="in_evidenza" value="1"> In evidenza in home page</label>
@@ -122,12 +134,133 @@
   await carica();
 
   const dlg = $('#dlg'), form = $('#form-gioco');
+
+  // ----- Lettura di gioco.json e copertina direttamente dallo ZIP, nel browser (niente attesa di caricamento)
+  async function leggiZip(file) {
+    const u8 = async (a, b) => new Uint8Array(await file.slice(a, b).arrayBuffer());
+    const coda = await u8(Math.max(0, file.size - 66000), file.size);
+    const dv = new DataView(coda.buffer);
+    let fine = -1;
+    for (let i = coda.length - 22; i >= 0; i--) if (dv.getUint32(i, true) === 0x06054b50) { fine = i; break; }
+    if (fine < 0) throw new Error('Il file non sembra uno ZIP valido.');
+    const nVoci = dv.getUint16(fine + 10, true), dimCd = dv.getUint32(fine + 12, true), inizioCd = dv.getUint32(fine + 16, true);
+    const cd = await u8(inizioCd, inizioCd + dimCd);
+    const c = new DataView(cd.buffer);
+    const voci = [];
+    const td = new TextDecoder();
+    for (let i = 0, p = 0; i < nVoci && p + 46 <= cd.length; i++) {
+      if (c.getUint32(p, true) !== 0x02014b50) break;
+      const metodo = c.getUint16(p + 10, true), compr = c.getUint32(p + 20, true);
+      const ln = c.getUint16(p + 28, true), le = c.getUint16(p + 30, true), lc = c.getUint16(p + 32, true), off = c.getUint32(p + 42, true);
+      const nome = td.decode(cd.subarray(p + 46, p + 46 + ln)).replace(/\\/g, '/');
+      if (!nome.endsWith('/') && !/(^|\/)(__MACOSX|\.DS_Store)/.test(nome)) voci.push({ nome, metodo, compr, off });
+      p += 46 + ln + le + lc;
+    }
+    async function estrai(v) {
+      const h = new DataView((await u8(v.off, v.off + 30)).buffer);
+      const dati = file.slice(v.off + 30 + h.getUint16(26, true) + h.getUint16(28, true), v.off + 30 + h.getUint16(26, true) + h.getUint16(28, true) + v.compr);
+      if (v.metodo === 0) return dati;
+      if (v.metodo !== 8 || !('DecompressionStream' in window)) return null;
+      return new Response(dati.stream().pipeThrough(new DecompressionStream('deflate-raw'))).blob();
+    }
+    const base = (n) => n.split('/').pop(), dir = (n) => (n.includes('/') ? n.slice(0, n.lastIndexOf('/') + 1) : '');
+    const prof = (n) => n.split('/').length;
+    const ordina = (l) => l.sort((a, b) => prof(a.nome) - prof(b.nome));
+    const avvio = ordina(voci.filter((v) => /^index\.html?$/i.test(base(v.nome))))[0];
+    const vs = ordina(voci.filter((v) => /^(gioco|game|scheda)\.json$/i.test(base(v.nome))))[0];
+    let scheda = null, errore = null;
+    if (vs) {
+      try { scheda = JSON.parse((await (await estrai(vs)).text()).replace(/^\uFEFF/, '')); }
+      catch (e) { errore = `gioco.json non è valido: ${e.message}`; }
+    }
+    let vc = null;
+    const nomeCop = scheda && (scheda.copertina || scheda.cover || scheda.immagine || scheda.image);
+    if (nomeCop) vc = voci.find((v) => v.nome.toLowerCase() === (dir(vs.nome) + String(nomeCop).replace(/^\.?\//, '')).toLowerCase());
+    if (!vc) {
+      const cand = ordina(voci.filter((v) => /^(copertina|cover|thumbnail|thumb|anteprima|poster)\.(png|jpe?g|webp|gif|svg)$/i.test(base(v.nome))));
+      vc = (vs && cand.find((v) => dir(v.nome) === dir(vs.nome))) || cand[0];
+    }
+    let copertina = null;
+    if (vc) {
+      const b = await estrai(vc);
+      const est = base(vc.nome).split('.').pop().toLowerCase();
+      if (b) copertina = new Blob([b], { type: est === 'svg' ? 'image/svg+xml' : `image/${est === 'jpg' ? 'jpeg' : est}` });
+    }
+    return { voci: voci.length, avvio: avvio && avvio.nome, scheda, errore, copertina, nomeCopertina: vc && vc.nome };
+  }
+
+  const prendi = (o, ...k) => { for (const x of k) if (o[x] != null && o[x] !== '') return o[x]; return undefined; };
+  const righe = (v) => (Array.isArray(v) ? v.join('\n') : v);
+  const sìNo = (v) => v === true || v === 1 || /^(true|si|sì|yes|1)$/i.test(String(v));
+  let urlAnteprima = null;
+
+  async function quandoScegliZip() {
+    const file = $('#f-zip').files[0];
+    if (!file) return;
+    $('#zip-titolo').textContent = file.name;
+    $('#zip-stato').textContent = 'Leggo il contenuto…';
+    let r;
+    try { r = await leggiZip(file); }
+    catch (e) { $('#zip-stato').textContent = e.message; return; }
+    const mb = (file.size / 1048576).toFixed(1);
+    const parti = [`${r.voci} file, ${mb} MB`];
+    if (!r.avvio) parti.push('attenzione: manca index.html');
+    if (r.errore) parti.push(r.errore);
+    if (r.scheda) {
+      const s = r.scheda;
+      const campi = { titolo: ['titolo', 'title', 'nome', 'name'], sottotitolo: ['sottotitolo', 'descrizione_breve', 'descrizioneBreve', 'frase', 'subtitle', 'tagline', 'short_description'],
+        descrizione: ['descrizione', 'descrizione_lunga', 'descrizioneLunga', 'description', 'long_description'], comandi: ['comandi', 'controlli', 'controls', 'istruzioni', 'how_to_play'],
+        autore: ['autore', 'author', 'studio', 'sviluppatore', 'developer'], file_avvio: ['file_avvio', 'avvio', 'entry', 'index'] };
+      for (const [campo, chiavi] of Object.entries(campi)) { const v = prendi(s, ...chiavi); if (v != null) form[campo].value = righe(v); }
+      const cat = prendi(s, 'categoria', 'category', 'genere', 'genre');
+      if (cat) form.categoria.value = info.categorie.find((c) => c.toLowerCase() === String(cat).toLowerCase()) || 'Altro';
+      for (const [campo, chiavi] of Object.entries({ pubblicato: ['pubblicato', 'published'], gratuito: ['gratuito', 'gratis', 'free'], in_evidenza: ['in_evidenza', 'evidenza', 'featured'] })) {
+        const v = prendi(s, ...chiavi); if (v != null) form[campo].checked = sìNo(v);
+      }
+      parti.push('scheda letta da gioco.json');
+    } else if (!r.errore) parti.push('nessun gioco.json: compila i campi a mano');
+    if (r.copertina) {
+      if (urlAnteprima) URL.revokeObjectURL(urlAnteprima);
+      urlAnteprima = URL.createObjectURL(r.copertina);
+      $('#anteprima-cop').src = urlAnteprima; $('#anteprima-cop').hidden = false;
+      parti.push(`copertina: ${r.nomeCopertina.split('/').pop()}`);
+    } else parti.push('nessuna copertina nello ZIP');
+    $('#zip-stato').textContent = parti.join(' · ');
+  }
+  $('#f-zip').addEventListener('change', quandoScegliZip);
+
+  // Trascinamento: sulla zona del modulo oppure in qualsiasi punto della pagina (apre un gioco nuovo)
+  const zona = $('#zona-zip');
+  ['dragenter', 'dragover'].forEach((t) => zona.addEventListener(t, (e) => { e.preventDefault(); zona.classList.add('sopra'); }));
+  ['dragleave', 'drop'].forEach((t) => zona.addEventListener(t, () => zona.classList.remove('sopra')));
+  function mettiFile(files) {
+    const f = [...files].find((x) => /\.zip$/i.test(x.name));
+    if (!f) return false;
+    const dt = new DataTransfer(); dt.items.add(f);
+    $('#f-zip').files = dt.files;
+    quandoScegliZip();
+    return true;
+  }
+  zona.addEventListener('drop', (e) => { e.preventDefault(); e.stopPropagation(); mettiFile(e.dataTransfer.files); });
+  let contaTrascina = 0;
+  document.addEventListener('dragenter', (e) => { if (!dlg.open && [...e.dataTransfer.types].includes('Files')) { contaTrascina++; document.body.classList.add('trascina'); } });
+  document.addEventListener('dragleave', () => { if (--contaTrascina <= 0) { contaTrascina = 0; document.body.classList.remove('trascina'); } });
+  document.addEventListener('dragover', (e) => e.preventDefault());
+  document.addEventListener('drop', (e) => {
+    e.preventDefault(); contaTrascina = 0; document.body.classList.remove('trascina');
+    if (dlg.open || $('#t-giochi').hidden) return;
+    apri(null);
+    if (!mettiFile(e.dataTransfer.files)) messaggio($('#msg-gioco'), 'Trascina un file .zip.');
+  });
   function apri(g) {
     form.reset();
     messaggio($('#msg-gioco'), '');
     form.id.value = g ? g.id : '';
     $('#dlg-titolo').textContent = g ? `Modifica: ${g.titolo}` : 'Nuovo gioco';
-    $('#nota-zip').textContent = g ? 'Lascia vuoti i file per mantenere quelli attuali. Un nuovo ZIP sostituisce la versione pubblicata.' : 'Lo ZIP è obbligatorio per un gioco nuovo.';
+    $('#nota-zip').textContent = g ? 'Lascia vuoto lo ZIP per mantenere la versione attuale. Un nuovo ZIP la sostituisce e, se contiene gioco.json, aggiorna anche i testi qui sotto.' : '';
+    $('#anteprima-cop').hidden = true;
+    $('#zip-titolo').textContent = g ? 'Trascina qui il nuovo ZIP (facoltativo)' : 'Trascina qui lo ZIP del gioco';
+    $('#zip-stato').innerHTML = 'oppure clicca per sceglierlo. Se dentro c\'è <b>gioco.json</b> con la copertina, il modulo si compila da solo.';
     if (g) {
       form.titolo.value = g.titolo; form.categoria.value = g.categoria; form.sottotitolo.value = g.sottotitolo;
       form.descrizione.value = g.descrizione; form.comandi.value = g.comandi; form.autore.value = g.autore;

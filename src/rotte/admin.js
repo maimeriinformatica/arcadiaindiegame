@@ -4,13 +4,12 @@ const config = require('../config');
 const { q, uno } = require('../db');
 const A = require('../accesso');
 const storage = require('../storage');
-const { slugify, importaZip } = require('../giochi');
+const { slugify, analizzaZip, importaVoci, CATEGORIE } = require('../giochi');
 
 const r = express.Router();
 r.use(A.richiediAdmin);
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: config.maxUploadMb * 1024 * 1024 } });
-const CATEGORIE = ['3D', 'Platform', 'Arcade', 'Avventura', 'Puzzle', 'Corse', 'Sport', 'Strategia', 'Narrativo', 'Altro'];
 const bool = (v) => v === true || v === 'true' || v === '1' || v === 'on';
 
 // Statistiche per la dashboard
@@ -39,6 +38,32 @@ function datiGioco(b) {
   };
 }
 
+// I campi scritti nel modulo vincono; quelli lasciati vuoti si prendono da gioco.json dentro lo ZIP.
+function unisci(body, meta) {
+  const out = { ...body };
+  for (const k of ['titolo', 'sottotitolo', 'descrizione', 'comandi', 'autore', 'categoria', 'file_avvio', 'slug']) {
+    if ((out[k] == null || String(out[k]).trim() === '') && meta[k]) out[k] = meta[k];
+  }
+  for (const k of ['pubblicato', 'gratuito', 'in_evidenza']) {
+    if (out[k] == null && meta[k] != null) out[k] = meta[k] ? '1' : '0';
+  }
+  return out;
+}
+
+async function salvaCopertinaZip(slug, cop) {
+  if (!cop || !cop.tipo) return null;
+  const chiave = `copertine/${slug}-${Date.now().toString(36)}.${cop.ext}`;
+  await storage.salva(chiave, cop.dati);
+  return chiave;
+}
+
+function analizza(pacchetto) {
+  if (!pacchetto) return { meta: {}, copertina: null, voci: null };
+  const an = analizzaZip(pacchetto.buffer);
+  if (an.errScheda) throw Object.assign(new Error(an.errScheda), { status: 400 });
+  return an;
+}
+
 async function salvaCopertina(slug, file) {
   if (!file) return null;
   if (!/^image\/(png|jpe?g|webp|gif|svg\+xml)$/.test(file.mimetype)) {
@@ -54,20 +79,23 @@ const campiUpload = upload.fields([{ name: 'pacchetto', maxCount: 1 }, { name: '
 
 r.post('/giochi', campiUpload, async (req, res, next) => {
   try {
-    const d = datiGioco(req.body);
-    if (!d.titolo) return res.status(400).json({ errore: 'Il titolo è obbligatorio.' });
     const pacchetto = req.files && req.files.pacchetto && req.files.pacchetto[0];
     if (!pacchetto) return res.status(400).json({ errore: 'Carica lo ZIP del gioco.' });
-    let slug = slugify(req.body.slug || d.titolo);
-    for (let i = 2; await uno('SELECT 1 FROM giochi WHERE slug=$1', [slug]); i++) slug = `${slugify(d.titolo)}-${i}`;
+    const an = analizza(pacchetto);
+    const corpo = unisci(req.body, an.meta);
+    const d = datiGioco(corpo);
+    if (!d.titolo) return res.status(400).json({ errore: 'Manca il titolo: scrivilo nel modulo oppure mettilo in gioco.json dentro lo ZIP.' });
+    let slug = slugify(corpo.slug || d.titolo);
+    for (let i = 2; await uno('SELECT 1 FROM giochi WHERE slug=$1', [slug]); i++) slug = `${slugify(corpo.slug || d.titolo)}-${i}`;
 
-    const nFile = await importaZip(slug, 1, pacchetto.buffer, d.file_avvio);
-    const copertina = await salvaCopertina(slug, req.files.copertina && req.files.copertina[0]);
+    const nFile = await importaVoci(slug, 1, an.voci, d.file_avvio);
+    const caricata = req.files.copertina && req.files.copertina[0];
+    const copertina = caricata ? await salvaCopertina(slug, caricata) : await salvaCopertinaZip(slug, an.copertina);
     const g = await uno(`INSERT INTO giochi (slug, titolo, categoria, sottotitolo, descrizione, comandi, autore, file_avvio,
         copertina, pubblicato, gratuito, in_evidenza, versione) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,1) RETURNING *`,
     [slug, d.titolo, d.categoria, d.sottotitolo, d.descrizione, d.comandi, d.autore, d.file_avvio, copertina,
       d.pubblicato, d.gratuito, d.in_evidenza]);
-    res.json({ gioco: g, file: nFile });
+    res.json({ gioco: g, file: nFile, daScheda: an.haScheda, copertinaDaZip: !caricata && Boolean(copertina) });
   } catch (e) { next(e); }
 });
 
@@ -75,18 +103,20 @@ r.put('/giochi/:id', campiUpload, async (req, res, next) => {
   try {
     const g = await uno('SELECT * FROM giochi WHERE id=$1', [req.params.id]);
     if (!g) return res.status(404).json({ errore: 'Gioco non trovato.' });
-    const d = datiGioco(req.body);
+    const pacchetto = req.files && req.files.pacchetto && req.files.pacchetto[0];
+    const an = analizza(pacchetto);
+    const d = datiGioco(unisci(req.body, an.meta));
     if (!d.titolo) return res.status(400).json({ errore: 'Il titolo è obbligatorio.' });
 
     let versione = g.versione;
     let nFile = null;
-    const pacchetto = req.files && req.files.pacchetto && req.files.pacchetto[0];
     if (pacchetto) {
       versione = g.versione + 1;
-      nFile = await importaZip(g.slug, versione, pacchetto.buffer, d.file_avvio);
+      nFile = await importaVoci(g.slug, versione, an.voci, d.file_avvio);
     }
     let copertina = g.copertina;
-    const nuova = await salvaCopertina(g.slug, req.files && req.files.copertina && req.files.copertina[0]);
+    const caricata = req.files && req.files.copertina && req.files.copertina[0];
+    const nuova = caricata ? await salvaCopertina(g.slug, caricata) : await salvaCopertinaZip(g.slug, an.copertina);
     if (nuova) copertina = nuova;
 
     const agg = await uno(`UPDATE giochi SET titolo=$1, categoria=$2, sottotitolo=$3, descrizione=$4, comandi=$5, autore=$6,

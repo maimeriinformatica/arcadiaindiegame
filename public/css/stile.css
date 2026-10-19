@@ -181,7 +181,7 @@ dialog form { padding: 24px; }
   .filtri input[type=search] { max-width: none; margin-left: 0; }
   .griglia2 { grid-template-columns: 1fr; }
   .testata .fila { gap: 8px; }
-  .nav { flex-wrap: nowrap; gap: 2px; }
+  .nav { flex-wrap: nowrap; gap: 2px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
   .nav a { padding: 7px 7px; font-size: .92rem; white-space: nowrap; }
   .logo span { display: none; }
 }

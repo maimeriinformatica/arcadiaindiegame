@@ -1,0 +1,21 @@
+{
+  "titolo": "Nome del gioco",
+  "sottotitolo": "Una frase breve che fa venire voglia di giocare (massimo 160 caratteri).",
+  "descrizione": [
+    "Descrizione lunga del gioco. Ogni elemento di questo elenco diventa un paragrafo.",
+    "Racconta la storia, l'ambientazione e cosa rende speciale il gioco."
+  ],
+  "comandi": [
+    "Frecce o WASD: muoviti",
+    "Spazio: salta",
+    "Telefono: pulsanti sullo schermo",
+    "Gamepad: stick sinistro e tasto A"
+  ],
+  "categoria": "Platform",
+  "autore": "Studio interno",
+  "copertina": "copertina.png",
+  "file_avvio": "index.html",
+  "pubblicato": true,
+  "gratuito": false,
+  "in_evidenza": false
+}

@@ -43,13 +43,32 @@ const config = {
   },
 };
 
+// Problemi bloccanti e avvisi, mostrati tutti insieme all'avvio (vedi server.js).
+config.problemi = [];
+config.avvisi = [];
+
 if (config.produzione && config.jwtSecret === 'cambia-questa-chiave-in-produzione') {
-  console.error('ERRORE: imposta JWT_SECRET in produzione.');
-  process.exit(1);
+  // Non blocchiamo l'avvio: usiamo una chiave casuale (gli utenti dovranno riaccedere a ogni riavvio).
+  config.jwtSecret = require('crypto').randomBytes(32).toString('hex');
+  config.avvisi.push('JWT_SECRET non impostata: uso una chiave temporanea, gli utenti verranno disconnessi a ogni riavvio. Aggiungila su Render (una frase lunga e casuale).');
 }
 if (config.produzione && config.paypal.simulato) {
-  console.error('ERRORE: PAYPAL_SIMULATO non può essere attivo in produzione.');
-  process.exit(1);
+  config.problemi.push('PAYPAL_SIMULATO=1 non è ammesso in produzione: toglila dalle variabili di Render.');
+}
+if (!config.databaseUrl) {
+  config.problemi.push('Manca DATABASE_URL: in Supabase apri "Connect" → "Session pooler", copia la stringa e sostituisci [YOUR-PASSWORD] con la password del database.');
+} else if (/\[YOUR-PASSWORD\]/i.test(config.databaseUrl)) {
+  config.problemi.push('In DATABASE_URL c\'è ancora "[YOUR-PASSWORD]": sostituiscilo con la password del database Supabase (senza parentesi quadre).');
+}
+if (config.storage.tipo === 'supabase') {
+  if (!config.storage.supabaseUrl) config.problemi.push('STORAGE=supabase ma manca SUPABASE_URL (Supabase → Project Settings → API → Project URL).');
+  if (!config.storage.supabaseKey) config.problemi.push('STORAGE=supabase ma manca SUPABASE_SERVICE_KEY (Supabase → Project Settings → API → chiave service_role).');
+}
+if (config.produzione && config.storage.tipo === 'locale') {
+  config.avvisi.push('STORAGE non è "supabase": i giochi caricati verranno persi a ogni nuovo deploy di Render.');
+}
+if (!config.paypal.simulato && !(config.paypal.clientId && config.paypal.pianoId)) {
+  config.avvisi.push('PayPal non configurato (PAYPAL_CLIENT_ID / PAYPAL_CLIENT_SECRET / PAYPAL_PLAN_ID): il sito funziona ma nessuno può abbonarsi.');
 }
 
 module.exports = config;

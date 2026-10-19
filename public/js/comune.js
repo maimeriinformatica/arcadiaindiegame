@@ -36,7 +36,7 @@ async function testata() {
     `<a href="${href}" class="${cls}" ${qui === href ? 'aria-current="page"' : ''}>${testo}</a>`;
   const voci = [link('/', 'Giochi')];
   if (u) {
-    if (u.admin) voci.push(link('/admin.html', 'Gestione'));
+    if (u.admin) voci.push(link('/admin.html', 'Gestione'), link('/statistiche.html', 'Statistiche'));
     voci.push(link('/account.html', 'Account'));
     if (!io.accesso.accesso) voci.push(link('/abbonati.html', 'Abbonati', 'btn piccolo'));
   } else {

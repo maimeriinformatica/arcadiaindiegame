@@ -21,6 +21,20 @@ Il nome "Arcadia Indie" è provvisorio: si cambia con la variabile `NOME_PIATTAF
   e *Corsia Cristallo* (runner 3D in Three.js, per abbonati).
 - Pagine **Termini** e **Privacy** già intestate a Maimeri Informatica (bozze da far verificare).
 
+## Statistiche (solo amministratore)
+
+Menu **Statistiche** → `/statistiche.html`. Raccoglie, senza servizi esterni e senza toccare i giochi:
+- provenienza di ogni visita: motori di ricerca, social, assistenti AI (ChatGPT, Perplexity…), altri siti con la pagina esatta del link, email, accesso diretto;
+- parole cercate (quando il motore le comunica) e ricerche fatte nel catalogo;
+- campagne con link tracciati (`utm_...`), con generatore di link per i social;
+- pagine e giochi più visti, pagine di ingresso e di uscita, click su link e pulsanti, tempo sulla pagina;
+- paese, regione e città (dall'indirizzo internet, che non viene salvato), dispositivo, browser, sistema, lingua, schermo;
+- iscrizioni e abbonamenti collegati alla provenienza, visitatori nuovi o di ritorno, giorni e ore di punta;
+- persone sul sito in questo momento, robot che leggono il sito, esportazione CSV.
+
+I dati stanno nella tabella `stat_visite` (creata da sola all'avvio) e vengono cancellati dopo 13 mesi.
+Le parole cercate su Google arrivano solo collegando il sito a Google Search Console.
+
 ## Come si protegge l'accesso
 
 I file dei giochi non sono pubblici: passano dal server, che controlla l'abbonamento a ogni
@@ -66,6 +80,35 @@ Con `PAYPAL_SIMULATO=1` il pulsante di pagamento simula l'abbonamento senza PayP
 (il server rifiuta di partire con questa opzione in produzione).
 
 ## Caricare un gioco
+
+Basta lo ZIP: trascinalo nella pagina Gestione (o nel modulo "Aggiungi un gioco").
+Se lo ZIP contiene anche **gioco.json** e un'immagine **copertina.png** (o .jpg/.webp/.svg),
+titolo, frase di presentazione, descrizione, comandi, categoria, autore, copertina e spunte
+si compilano da soli: controlli e premi "Salva il gioco". Quello che scrivi a mano nel modulo vince sul file.
+
+Esempio di `gioco.json` (modello scaricabile dalla pagina Gestione, `/modello-gioco.json`):
+
+```json
+{
+  "titolo": "Nome del gioco",
+  "sottotitolo": "Frase breve (max 160 caratteri)",
+  "descrizione": ["Primo paragrafo.", "Secondo paragrafo."],
+  "comandi": ["Frecce: muoviti", "Spazio: salta"],
+  "categoria": "Platform",
+  "autore": "Studio interno",
+  "copertina": "copertina.png",
+  "file_avvio": "index.html",
+  "pubblicato": true,
+  "gratuito": false,
+  "in_evidenza": false
+}
+```
+
+- Categorie: 3D, Platform, Arcade, Avventura, Puzzle, Corse, Sport, Strategia, Narrativo, Da tavolo, Altro.
+- `descrizione` e `comandi` possono essere un testo unico o un elenco di righe.
+- Vanno bene anche i nomi inglesi (title, description, controls, category, cover…) e il nome `game.json`.
+- Se `copertina` manca, viene usato il primo file chiamato copertina/cover/thumbnail nello ZIP.
+- Un JSON scritto male blocca il caricamento con un messaggio che indica la riga dell'errore.
 
 Esporta il gioco per il web e comprimi la cartella in ZIP (deve contenere `index.html`,
 anche dentro una sottocartella). Consigli per motore:

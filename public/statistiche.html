@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="it" data-nome="{{NOME}}" data-ditta="{{DITTA}}" data-piva="{{DITTA_PIVA}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Statistiche – {{NOME}}</title>
+<link rel="icon" href="/img/icona.svg">
+<link rel="stylesheet" href="/css/stile.css">
+<style>
+  main { max-width: 1280px; }
+  .barra-periodo { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 4px 0 22px; }
+  .barra-periodo input[type=date] { width: auto; padding: 7px 10px; }
+  .barra-periodo .spunta { margin: 0 6px; }
+  .barra-periodo .spazio { flex: 1; }
+  .adesso { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; color: var(--verde); }
+  .adesso::before { content: ''; width: 9px; height: 9px; border-radius: 50%; background: var(--verde); box-shadow: 0 0 0 4px rgb(95 211 160 / .2); }
+  .indice { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 26px; }
+  .indice a { color: var(--lavanda); text-decoration: none; font-weight: 600; font-size: .92rem; padding: 6px 12px; border-radius: 999px; border: 1.5px solid var(--bordo); }
+  .indice a:hover { color: var(--carta); border-color: var(--lavanda); }
+  .tessere { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 18px; }
+  .tessera { background: var(--inchiostro); border-radius: var(--r); padding: 14px 16px; }
+  .tessera b { display: block; font-size: 1.75rem; line-height: 1.1; }
+  .tessera span { color: var(--lavanda); font-size: .88rem; }
+  .delta { font-size: .8rem; font-weight: 600; margin-left: 4px; }
+  .delta.su { color: var(--verde); } .delta.giu { color: var(--rosso); } .delta.pari { color: var(--lavanda); }
+  section.blocco { margin: 38px 0 0; scroll-margin-top: 80px; }
+  section.blocco > h2 { margin-bottom: 4px; }
+  section.blocco > p.muted { margin: 0 0 16px; max-width: 80ch; }
+  .griglia { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; }
+  .scheda-stat { background: var(--inchiostro); border-radius: var(--r); padding: 16px 18px; min-width: 0; }
+  .scheda-stat h3 { margin: 0 0 12px; font-size: 1.02rem; }
+  .scheda-stat .vuota { color: var(--lavanda); font-size: .92rem; margin: 6px 0; }
+  .barre { display: grid; gap: 7px; }
+  .barra-riga { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; font-size: .92rem; }
+  .barra-riga .nome-barra { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .barra-riga .valore { font-variant-numeric: tabular-nums; font-weight: 600; text-align: right; }
+  .barra-riga .valore small { color: var(--lavanda); font-weight: 400; margin-left: 6px; }
+  .barra-riga .traccia { grid-column: 1 / -1; height: 6px; border-radius: 3px; background: var(--inchiostro-2); }
+  .barra-riga .traccia i { display: block; height: 100%; border-radius: 3px; background: var(--arancio); min-width: 3px; }
+  .tab-stat { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  .tab-stat th, .tab-stat td { padding: 7px 6px; border-bottom: 1px solid var(--inchiostro-2); text-align: left; vertical-align: top; }
+  .tab-stat th { color: var(--lavanda); font-weight: 600; white-space: nowrap; }
+  .tab-stat td.n, .tab-stat th.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .tab-stat td.lungo { word-break: break-all; }
+  .grafico { position: relative; background: var(--inchiostro); border-radius: var(--r); padding: 16px 18px 10px; }
+  .grafico svg { display: block; width: 100%; height: 240px; overflow: visible; }
+  .grafico .scelte { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .suggerimento { position: absolute; pointer-events: none; background: var(--notte); border: 1px solid var(--bordo); border-radius: 10px; padding: 8px 10px; font-size: .86rem; white-space: nowrap; transform: translate(-50%, -110%); display: none; z-index: 5; }
+  .suggerimento b { display: block; font-size: 1rem; }
+  .mappa-orari { display: grid; grid-template-columns: 34px repeat(24, minmax(0, 1fr)); gap: 3px; font-size: .72rem; color: var(--lavanda); }
+  .mappa-orari .cella { aspect-ratio: 1; border-radius: 3px; background: var(--inchiostro-2); }
+  .mappa-orari .cella:hover { outline: 2px solid var(--carta); }
+  .mappa-orari .ora { text-align: center; }
+  .legenda-mappa { display: flex; align-items: center; gap: 6px; font-size: .8rem; color: var(--lavanda); margin-top: 10px; }
+  .legenda-mappa i { width: 18px; height: 10px; border-radius: 2px; display: inline-block; }
+  .percorso-visita { color: var(--lavanda); font-size: .84rem; }
+  .nota { background: var(--inchiostro-2); border-radius: 10px; padding: 10px 12px; font-size: .88rem; margin-top: 12px; }
+  .generatore .griglia2 { gap: 0 14px; }
+  .link-pronto { display: flex; gap: 8px; margin-top: 14px; }
+  .link-pronto input { font-size: .9rem; }
+  .caricamento { color: var(--lavanda); padding: 40px 0; text-align: center; }
+  @media (max-width: 700px) {
+    .griglia { grid-template-columns: 1fr; }
+    .mappa-orari { grid-template-columns: 26px repeat(24, minmax(0, 1fr)); gap: 2px; }
+    .barra-periodo .spazio { display: none; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap">
+    <h1 style="margin:0">Statistiche</h1>
+    <span class="adesso" id="adesso" title="Persone con una pagina aperta negli ultimi 5 minuti">…</span>
+  </div>
+
+  <div class="barra-periodo" role="group" aria-label="Periodo">
+    <button class="chip" data-g="1">Oggi</button>
+    <button class="chip" data-g="7">7 giorni</button>
+    <button class="chip" data-g="30" aria-pressed="true">30 giorni</button>
+    <button class="chip" data-g="90">90 giorni</button>
+    <button class="chip" data-g="365">12 mesi</button>
+    <label for="da" class="piccolo" style="margin:0 0 0 8px">Dal</label><input type="date" id="da">
+    <label for="a" class="piccolo" style="margin:0">al</label><input type="date" id="a">
+    <label class="spunta piccolo"><input type="checkbox" id="mie"> Includi le visite degli amministratori</label>
+    <span class="spazio"></span>
+    <a class="btn piccolo secondario" id="esporta" href="#">Scarica CSV</a>
+  </div>
+
+  <nav class="indice" aria-label="Sezioni">
+    <a href="#provenienza">Da dove arrivano</a><a href="#ricerche">Cosa cercano</a><a href="#campagne">Campagne e link</a>
+    <a href="#contenuti">Cosa guardano</a><a href="#pubblico">Chi sono</a><a href="#orari">Quando</a>
+    <a href="#ultime">Ultime visite</a><a href="#robot">Robot</a>
+  </nav>
+
+  <div id="contenuto"><p class="caricamento">Caricamento delle statistiche…</p></div>
+</main>
+
+<script src="/js/comune.js"></script>
+<script>
+(async () => {
+  const io = await testata();
+  if (!io.utente || !io.utente.admin) { location.href = '/accedi.html?dopo=/statistiche.html'; return; }
+
+  const fmt = (n) => (n == null ? '–' : Number(n).toLocaleString('it-IT'));
+  const durata = (s) => {
+    if (s == null) return '–';
+    if (s < 60) return `${s} s`;
+    const m = Math.floor(s / 60), r = s % 60;
+    return m < 60 ? `${m} min ${r ? r + ' s' : ''}`.trim() : `${Math.floor(m / 60)} h ${m % 60} min`;
+  };
+  const nomiPaesi = new Intl.DisplayNames(['it'], { type: 'region' });
+  const nomiLingue = new Intl.DisplayNames(['it'], { type: 'language' });
+  const paese = (c) => { if (!c || c === '??') return 'Non rilevato'; try { return nomiPaesi.of(c); } catch { return c; } };
+  const bandiera = (c) => (c && /^[A-Z]{2}$/.test(c) ? String.fromCodePoint(...[...c].map((x) => 127397 + x.charCodeAt(0))) + ' ' : '');
+  const lingua = (l) => { if (!l || l === 'Non rilevato') return 'Non rilevata'; try { const n = nomiLingue.of(l); return n ? n.charAt(0).toUpperCase() + n.slice(1) + ` (${l})` : l; } catch { return l; } };
+  const quando = (t) => new Date(t).toLocaleString('it-IT', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+
+  // ---------- stato del filtro (ricordato nell'indirizzo, così un link riapre la stessa vista)
+  const qs = new URLSearchParams(location.search);
+  let filtro = { giorni: qs.get('giorni') || (qs.get('da') ? '' : '30'), da: qs.get('da') || '', a: qs.get('a') || '', admin: qs.get('admin') === '1' };
+  $('#mie').checked = filtro.admin;
+  function parametri() {
+    const p = new URLSearchParams();
+    if (filtro.da && filtro.a) { p.set('da', filtro.da); p.set('a', filtro.a); } else p.set('giorni', filtro.giorni || '30');
+    if (filtro.admin) p.set('admin', '1');
+    return p.toString();
+  }
+  function aggiornaControlli() {
+    document.querySelectorAll('.chip[data-g]').forEach((c) => c.setAttribute('aria-pressed', !filtro.da && c.dataset.g === String(filtro.giorni)));
+    $('#esporta').href = `/api/admin/statistiche/esporta.csv?${parametri()}`;
+  }
+  document.querySelectorAll('.chip[data-g]').forEach((c) => c.onclick = () => { filtro = { ...filtro, giorni: c.dataset.g, da: '', a: '' }; carica(); });
+  ['#da', '#a'].forEach((s) => $(s).onchange = () => { if ($('#da').value && $('#a').value) { filtro = { ...filtro, da: $('#da').value, a: $('#a').value, giorni: '' }; carica(); } });
+  $('#mie').onchange = (e) => { filtro.admin = e.target.checked; carica(); };
+
+  // ---------- componenti
+  function barre(righe, { nome = (r) => r.nome, valore = 'visite', extra, max = 12, vuoto = 'Ancora nessun dato in questo periodo.' } = {}) {
+    if (!righe || !righe.length) return `<p class="vuota">${vuoto}</p>`;
+    const top = Math.max(...righe.map((r) => r[valore] || 0), 1);
+    return `<div class="barre">${righe.slice(0, max).map((r) => `
+      <div class="barra-riga" title="${esc(nome(r))}">
+        <span class="nome-barra">${esc(nome(r))}</span>
+        <span class="valore">${fmt(r[valore])}${extra ? `<small>${extra(r)}</small>` : ''}</span>
+        <span class="traccia"><i style="width:${(100 * (r[valore] || 0) / top).toFixed(1)}%"></i></span>
+      </div>`).join('')}</div>`;
+  }
+  function tabella(righe, colonne, vuoto = 'Ancora nessun dato in questo periodo.') {
+    if (!righe || !righe.length) return `<p class="vuota">${vuoto}</p>`;
+    return `<div class="tabella-wrap"><table class="tab-stat"><thead><tr>${colonne.map((c) => `<th class="${c.n ? 'n' : ''}">${c.t}</th>`).join('')}</tr></thead>
+      <tbody>${righe.map((r) => `<tr>${colonne.map((c) => `<td class="${c.n ? 'n' : ''} ${c.lungo ? 'lungo' : ''}">${c.f ? c.f(r) : esc(r[c.k] ?? '')}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+  }
+  const scheda = (titolo, html, nota, largo) => `<div class="scheda-stat"${largo ? ' style="grid-column:1/-1"' : ''}><h3>${titolo}</h3>${html}${nota ? `<div class="nota">${nota}</div>` : ''}</div>`;
+  const conv = (r) => [r.iscrizioni ? `${r.iscrizioni} iscr.` : '', r.abbonamenti ? `${r.abbonamenti} abb.` : ''].filter(Boolean).join(' · ');
+  function delta(att, prec, inverso) {
+    if (att == null || prec == null) return '';
+    if (!prec) return att ? '<span class="delta su">nuovo</span>' : '';
+    const d = Math.round(100 * (att - prec) / prec);
+    if (!d) return '<span class="delta pari">=</span>';
+    const buono = inverso ? d < 0 : d > 0;
+    return `<span class="delta ${buono ? 'su' : 'giu'}">${d > 0 ? '+' : ''}${d}%</span>`;
+  }
+
+  // ---------- grafico dell'andamento (una serie alla volta, con suggerimento al passaggio)
+  let datiSerie = [], metrica = 'visite', orario = false;
+  const NOMI_METRICHE = { visite: 'Visite', visitatori: 'Visitatori', pagine: 'Pagine viste', iscrizioni: 'Iscrizioni', abbonamenti: 'Abbonamenti' };
+  function etichettaTempo(t, lunga) {
+    const d = new Date(t);
+    if (orario) return lunga ? d.toLocaleString('it-IT', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : `${String(d.getHours()).padStart(2, '0')}:00`;
+    return d.toLocaleDateString('it-IT', lunga ? { weekday: 'long', day: 'numeric', month: 'long' } : { day: 'numeric', month: 'short' });
+  }
+  function disegnaGrafico() {
+    const box = $('#grafico');
+    if (!box) return;
+    const svgEl = box.querySelector('svg');
+    const W = Math.max(280, Math.round(svgEl.getBoundingClientRect().width) || 800), H = 240, sx = 36, dx = 8, su = 10, giu = 26;
+    svgEl.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    const v = datiSerie.map((d) => d[metrica]);
+    const max = Math.max(4, ...v);
+    const grezzo = max / 4, mag = Math.pow(10, Math.floor(Math.log10(grezzo)));
+    const passo = [1, 2, 5, 10].map((m) => m * mag).find((x) => x >= grezzo);
+    const top = Math.ceil(max / passo) * passo;
+    const x = (i) => sx + (v.length > 1 ? i * (W - sx - dx) / (v.length - 1) : (W - sx - dx) / 2);
+    const y = (n) => su + (H - su - giu) * (1 - n / top);
+    let griglia = '';
+    for (let g = 0; g <= top + 1e-9; g += passo) {
+      griglia += `<line x1="${sx}" x2="${W - dx}" y1="${y(g)}" y2="${y(g)}" stroke="#2d2963" stroke-width="1"/>
+        <text x="${sx - 8}" y="${y(g) + 4}" text-anchor="end" fill="#b9b3e8" font-size="11">${fmt(Math.round(g))}</text>`;
+    }
+    const ogni = Math.max(1, Math.ceil(v.length / Math.max(3, Math.floor(W / 95))));
+    const assi = datiSerie.map((d, i) => (i % ogni === 0 ? `<text x="${x(i)}" y="${H - 6}" text-anchor="middle" fill="#b9b3e8" font-size="11">${esc(etichettaTempo(d.t))}</text>` : '')).join('');
+    const pts = v.map((n, i) => `${x(i).toFixed(1)},${y(n).toFixed(1)}`).join(' ');
+    const area = v.length ? `M${x(0)},${y(0)} L${pts.split(' ').join(' L')} L${x(v.length - 1)},${y(0)} Z` : '';
+    box.querySelector('svg').innerHTML = `${griglia}${assi}
+      <path d="${area}" fill="#ff7a45" fill-opacity=".14"/>
+      <polyline points="${pts}" fill="none" stroke="#ff7a45" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <line id="mirino" y1="${su}" y2="${y(0)}" stroke="#f6f0ff" stroke-opacity=".5" stroke-width="1" visibility="hidden"/>
+      <circle id="punto" r="5" fill="#ff7a45" stroke="#221f4f" stroke-width="2" visibility="hidden"/>
+      <rect x="${sx}" y="0" width="${W - sx - dx}" height="${H}" fill="transparent" id="zona"/>`;
+    const svg = box.querySelector('svg'), tip = box.querySelector('.suggerimento');
+    const zona = svg.querySelector('#zona');
+    function mostra(ev) {
+      const r = svg.getBoundingClientRect();
+      const px = (ev.clientX - r.left) * W / r.width;
+      const i = Math.max(0, Math.min(v.length - 1, Math.round((px - sx) / ((W - sx - dx) / Math.max(1, v.length - 1)))));
+      svg.querySelector('#mirino').setAttribute('x1', x(i)); svg.querySelector('#mirino').setAttribute('x2', x(i));
+      svg.querySelector('#mirino').setAttribute('visibility', 'visible');
+      const p = svg.querySelector('#punto'); p.setAttribute('cx', x(i)); p.setAttribute('cy', y(v[i])); p.setAttribute('visibility', 'visible');
+      tip.style.display = 'block';
+      tip.style.left = `${18 + x(i) * r.width / W}px`;
+      tip.style.top = `${16 + 40 + y(v[i]) * r.height / H}px`;
+      tip.innerHTML = `<b>${fmt(v[i])} ${NOMI_METRICHE[metrica].toLowerCase()}</b>${esc(etichettaTempo(datiSerie[i].t, true))}`;
+    }
+    zona.addEventListener('pointermove', mostra);
+    zona.addEventListener('pointerleave', () => { tip.style.display = 'none'; svg.querySelector('#mirino').setAttribute('visibility', 'hidden'); svg.querySelector('#punto').setAttribute('visibility', 'hidden'); });
+  }
+
+  // ---------- mappa giorno × ora
+  function mappaOrari(righe) {
+    const m = {}; let max = 0;
+    righe.forEach((r) => { m[`${r.giorno}-${r.ora}`] = r.visite; max = Math.max(max, r.visite); });
+    if (!max) return '<p class="vuota">Ancora nessun dato in questo periodo.</p>';
+    const giorni = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
+    const colore = (n) => (n ? `color-mix(in srgb, #ff7a45 ${Math.round(18 + 82 * n / max)}%, #2d2963)` : '');
+    let h = '<div class="mappa-orari"><span></span>' + Array.from({ length: 24 }, (_, o) => `<span class="ora">${o % 3 === 0 ? o : ''}</span>`).join('');
+    giorni.forEach((g, gi) => {
+      h += `<span>${g}</span>`;
+      for (let o = 0; o < 24; o++) {
+        const n = m[`${gi + 1}-${o}`] || 0;
+        h += `<span class="cella" style="${n ? `background:${colore(n)}` : ''}" title="${g} ${o}:00–${o}:59 · ${n} visite"></span>`;
+      }
+    });
+    return `${h}</div><div class="legenda-mappa">Meno <i style="background:#2d2963"></i><i style="background:${colore(max * .33)}"></i><i style="background:${colore(max * .66)}"></i><i style="background:${colore(max)}"></i> Più (max ${max} visite in un'ora)</div>`;
+  }
+
+  // ---------- generatore di link tracciati
+  let giochi = [];
+  async function generatore() {
+    if (!giochi.length) giochi = (await api('/giochi')).giochi;
+    return `<div class="scheda-stat generatore" style="grid-column:1/-1">
+      <h3>Crea un link tracciato per i social</h3>
+      <p class="muted piccolo" style="margin-top:-6px">Usa questi link nei post, nella bio o nei QR code: qui vedrai esattamente quante visite, iscrizioni e abbonamenti porta ciascuno.</p>
+      <div class="griglia2">
+        <div><label for="u-dest">Pagina di arrivo</label><select id="u-dest"><option value="/">Home</option><option value="/abbonati.html">Pagina abbonamento</option>
+          ${giochi.map((g) => `<option value="/gioco.html?slug=${encodeURIComponent(g.slug)}">Gioco: ${esc(g.titolo)}</option>`).join('')}</select></div>
+        <div><label for="u-src">Dove lo pubblichi</label><select id="u-src">
+          <option value="instagram|social">Instagram</option><option value="facebook|social">Facebook</option><option value="tiktok|social">TikTok</option>
+          <option value="youtube|social">YouTube</option><option value="whatsapp|social">WhatsApp</option><option value="telegram|social">Telegram</option>
+          <option value="newsletter|email">Email / newsletter</option><option value="qr|qr">QR code / volantino</option><option value="altro|referral">Altro sito</option></select></div>
+        <div><label for="u-camp">Nome campagna</label><input type="text" id="u-camp" placeholder="es. lancio-ottobre"></div>
+        <div><label for="u-cont">Quale post o versione (facoltativo)</label><input type="text" id="u-cont" placeholder="es. reel-1, bio, storia-12"></div>
+      </div>
+      <div class="link-pronto"><input type="text" id="u-link" readonly aria-label="Link pronto"><button class="btn piccolo" id="u-copia">Copia</button></div>
+    </div>`;
+  }
+  function attivaGeneratore() {
+    const pulito = (s) => s.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const crea = () => {
+      const [src, med] = $('#u-src').value.split('|');
+      const u = new URL($('#u-dest').value, location.origin);
+      u.searchParams.set('utm_source', src); u.searchParams.set('utm_medium', med);
+      u.searchParams.set('utm_campaign', pulito($('#u-camp').value) || 'generale');
+      if (pulito($('#u-cont').value)) u.searchParams.set('utm_content', pulito($('#u-cont').value));
+      $('#u-link').value = u.toString();
+    };
+    ['#u-dest', '#u-src', '#u-camp', '#u-cont'].forEach((s) => $(s).addEventListener('input', crea));
+    crea();
+    $('#u-copia').onclick = async () => {
+      try { await navigator.clipboard.writeText($('#u-link').value); $('#u-copia').textContent = 'Copiato'; }
+      catch { $('#u-link').select(); }
+      setTimeout(() => { $('#u-copia').textContent = 'Copia'; }, 1500);
+    };
+  }
+
+  // ---------- caricamento e disegno della pagina
+  async function carica() {
+    aggiornaControlli();
+    history.replaceState(null, '', `?${parametri()}`);
+    let d;
+    try { d = await api(`/admin/statistiche?${parametri()}`); }
+    catch (e) { $('#contenuto').innerHTML = `<div class="avviso errore">${esc(e.message)}</div>`; return; }
+    $('#da').value = d.intervallo.da; $('#a').value = d.intervallo.a;
+    datiSerie = d.serie; orario = d.orario;
+    const k = d.attuale, p = d.precedente;
+    const tasso = k.visite ? Math.round(1000 * k.abbonamenti / k.visite) / 10 : 0;
+    const vuoto = !k.pagine;
+
+    const tessere = [
+      ['Visite', k.visite, p.visite], ['Visitatori unici', k.visitatori, p.visitatori], ['Pagine viste', k.pagine, p.pagine],
+      ['Nuovi visitatori', k.nuovi, p.nuovi], ['Partite avviate', k.partite, p.partite],
+      ['Iscrizioni', k.iscrizioni, p.iscrizioni], ['Abbonamenti', k.abbonamenti, p.abbonamenti],
+    ].map(([t, a, b]) => `<div class="tessera"><span>${t}</span><b>${fmt(a)}${delta(a, b)}</b></div>`).join('')
+      + `<div class="tessera"><span>Durata media visita</span><b>${durata(k.durata_media)}</b></div>`
+      + `<div class="tessera"><span>Pagine per visita</span><b>${k.pagine_per_visita ?? '–'}</b></div>`
+      + `<div class="tessera"><span>Rimbalzo (1 sola pagina)</span><b>${k.rimbalzo == null ? '–' : k.rimbalzo + '%'}${delta(k.rimbalzo, p.rimbalzo, true)}</b></div>`
+      + `<div class="tessera"><span>Visite → abbonamento</span><b>${tasso}%</b></div>`;
+
+    const ricercheNota = d.ricercheNascoste
+      ? `${fmt(d.ricercheNascoste)} visite da motori di ricerca senza parole chiave: Google e la maggior parte dei motori non le comunicano più ai siti. Per vederle tutte collega il sito a <a href="https://search.google.com/search-console" target="_blank" rel="noopener">Google Search Console</a> (gratis) e a <a href="https://www.bing.com/webmasters" target="_blank" rel="noopener">Bing Webmaster Tools</a>.`
+      : 'Google e la maggior parte dei motori non comunicano più le parole cercate: per vederle collega il sito a <a href="https://search.google.com/search-console" target="_blank" rel="noopener">Google Search Console</a> (gratis).';
+
+    $('#contenuto').innerHTML = `
+      ${vuoto ? '<div class="avviso">Nessuna visita registrata in questo periodo. Le statistiche si riempiono da sole man mano che arrivano visitatori.</div>' : ''}
+      <div class="tessere">${tessere}</div>
+      <div class="grafico" id="grafico">
+        <div class="scelte">${Object.entries(NOMI_METRICHE).map(([m, n]) => `<button class="chip" data-m="${m}" aria-pressed="${m === metrica}">${n}</button>`).join('')}</div>
+        <svg viewBox="0 0 800 240" role="img" aria-label="Andamento nel periodo"></svg>
+        <div class="suggerimento"></div>
+      </div>
+
+      <section class="blocco" id="provenienza">
+        <h2>Da dove arrivano</h2>
+        <p class="muted">Ogni visita viene attribuita a come è iniziata: motore di ricerca, social, un altro sito, un link tracciato o accesso diretto (indirizzo scritto a mano, preferiti, app che non dicono la provenienza).</p>
+        <div class="griglia">
+          ${scheda('Canali', barre(d.canali, { extra: conv }))}
+          ${scheda('Sorgenti', tabella(d.sorgenti, [
+            { t: 'Sorgente', k: 'nome' }, { t: 'Canale', k: 'canale' }, { t: 'Visite', k: 'visite', n: 1 },
+            { t: 'Persone', k: 'visitatori', n: 1 }, { t: 'Iscr.', k: 'iscrizioni', n: 1 }, { t: 'Abb.', k: 'abbonamenti', n: 1 }]))}
+          ${scheda('Siti che mandano visite', tabella(d.siti, [
+            { t: 'Sito', f: (r) => `<a href="https://${esc(r.nome)}" target="_blank" rel="noopener noreferrer">${esc(r.nome)}</a>` },
+            { t: 'Tipo', k: 'canale' }, { t: 'Visite', k: 'visite', n: 1 }, { t: 'Persone', k: 'visitatori', n: 1 }]))}
+          ${scheda('Pagine esatte che contengono un link a te', tabella(d.linkEsterni, [
+            { t: 'Pagina', lungo: 1, f: (r) => `<a href="${esc(r.nome)}" target="_blank" rel="noopener noreferrer">${esc(r.nome.replace(/^https?:\/\//, ''))}</a>` },
+            { t: 'Visite', k: 'visite', n: 1 }], 'Nessun link da altri siti in questo periodo.'))}
+        </div>
+      </section>
+
+      <section class="blocco" id="ricerche">
+        <h2>Cosa cercano</h2>
+        <div class="griglia">
+          ${scheda('Parole cercate sui motori di ricerca', tabella(d.ricerche, [
+            { t: 'Ricerca', k: 'nome' }, { t: 'Motore', k: 'sorgente' }, { t: 'Visite', k: 'visite', n: 1 }],
+            'Nessuna parola chiave ricevuta in questo periodo.'), ricercheNota)}
+          ${scheda('Cosa cercano nel catalogo del sito', tabella(d.ricercheInterne, [
+            { t: 'Ricerca', k: 'nome' }, { t: 'Volte', k: 'volte', n: 1 }, { t: 'Persone', k: 'persone', n: 1 }],
+            'Nessuno ha ancora usato la ricerca del catalogo.'), 'Utile per capire quali giochi la gente si aspetta di trovare.')}
+        </div>
+      </section>
+
+      <section class="blocco" id="campagne">
+        <h2>Campagne e link tracciati</h2>
+        <div class="griglia">
+          ${scheda('Risultati dei link tracciati', tabella(d.campagne, [
+            { t: 'Campagna', k: 'campagna' }, { t: 'Dove', k: 'sorgente' }, { t: 'Mezzo', k: 'mezzo' }, { t: 'Post / versione', k: 'contenuto' },
+            { t: 'Visite', k: 'visite', n: 1 }, { t: 'Iscr.', k: 'iscrizioni', n: 1 }, { t: 'Abb.', k: 'abbonamenti', n: 1 }],
+            'Nessun link tracciato usato in questo periodo. Creane uno qui sotto.'), null, true)}
+          ${await generatore()}
+        </div>
+      </section>
+
+      <section class="blocco" id="contenuti">
+        <h2>Cosa guardano</h2>
+        <div class="griglia">
+          ${scheda('Giochi', tabella(d.giochi, [
+            { t: 'Gioco', k: 'nome' }, { t: 'Schede viste', k: 'schede', n: 1 }, { t: 'Partite', k: 'partite', n: 1 },
+            { t: 'Giocatori', k: 'giocatori', n: 1 }, { t: 'Tempo medio', n: 1, f: (r) => durata(r.durata_media) }],
+            'Nessun gioco aperto in questo periodo.'), null, true)}
+          ${scheda('Pagine più viste', tabella(d.pagine, [
+            { t: 'Pagina', k: 'nome' }, { t: 'Viste', k: 'viste', n: 1 }, { t: 'Persone', k: 'visitatori', n: 1 }, { t: 'Tempo medio', n: 1, f: (r) => durata(r.durata_media) }]))}
+          ${scheda('Pagina da cui entrano', barre(d.ingresso))}
+          ${scheda('Pagina da cui escono', barre(d.uscita))}
+          ${scheda('Cosa cliccano', tabella(d.click, [
+            { t: 'Elemento', k: 'nome' }, { t: 'Pagina', k: 'pagina' }, { t: 'Click', k: 'click', n: 1 }, { t: 'Persone', k: 'persone', n: 1 }],
+            'Nessun click registrato in questo periodo.'))}
+        </div>
+      </section>
+
+      <section class="blocco" id="pubblico">
+        <h2>Chi sono</h2>
+        <p class="muted">Luogo ricavato dall'indirizzo internet (precisione: città o zona del fornitore di connessione). L'indirizzo non viene salvato.</p>
+        <div class="griglia">
+          ${scheda('Paesi', barre(d.paesi, { nome: (r) => bandiera(r.codice) + paese(r.codice) }))}
+          ${scheda('Regioni italiane', barre(d.regioni, { max: 20 }))}
+          ${scheda('Città', barre(d.citta, { nome: (r) => `${r.nome}${r.paese !== 'IT' ? ` (${paese(r.paese)})` : r.regione ? ` (${r.regione})` : ''}`, max: 20 }))}
+          ${scheda('Nuovi o di ritorno', barre([
+            { nome: 'Prima visita', visite: d.ritorno.nuovi }, { nome: 'Già venuti in passato', visite: d.ritorno.di_ritorno }].filter((r) => r.visite)))}
+          ${scheda('Dispositivi', barre(d.dispositivi))}
+          ${scheda('Browser e app', barre(d.browser))}
+          ${scheda('Sistemi operativi', barre(d.sistemi))}
+          ${scheda('Lingue del browser', barre(d.lingue, { nome: (r) => lingua(r.nome) }))}
+          ${scheda('Dimensioni dello schermo', barre(d.schermi, { max: 10 }))}
+        </div>
+      </section>
+
+      <section class="blocco" id="orari">
+        <h2>Quando arrivano</h2>
+        ${scheda('Visite per giorno e ora', mappaOrari(d.orari), 'Il momento più affollato è il migliore per pubblicare sui social.')}
+      </section>
+
+      <section class="blocco" id="ultime">
+        <h2>Ultime visite</h2>
+        ${scheda('Le 60 visite più recenti', tabella(d.ultime, [
+          { t: 'Quando', f: (r) => quando(r.inizio) },
+          { t: 'Da dove', f: (r) => `${esc(r.sorgente || '')}${r.ricerca ? `<br><span class="percorso-visita">«${esc(r.ricerca)}»</span>` : ''}${r.utm_campaign ? `<br><span class="percorso-visita">campagna ${esc(r.utm_campaign)}</span>` : ''}` },
+          { t: 'Pagine viste', f: (r) => `<span class="percorso-visita">${(r.percorso || []).slice(0, 8).map(esc).join(' → ')}${(r.percorso || []).length > 8 ? ' …' : ''}</span>` },
+          { t: 'Durata', n: 1, f: (r) => durata(r.durata) },
+          { t: 'Luogo', f: (r) => `${bandiera(r.paese)}${esc(r.citta || r.regione || paese(r.paese))}` },
+          { t: 'Dispositivo', f: (r) => `${esc(r.dispositivo || '')}<br><span class="percorso-visita">${esc([r.browser, r.sistema].filter(Boolean).join(' · '))}</span>` },
+          { t: 'Esito', f: (r) => `${(r.eventi || []).map((e) => `<span class="badge si">${e === 'abbonamento' ? 'Abbonato' : 'Iscritto'}</span>`).join(' ')}${r.email ? `<br><span class="percorso-visita">${esc(r.email)}</span>` : ''}${r.nuovo_visitatore ? '' : ' <span class="badge">di ritorno</span>'}` },
+        ]))}
+      </section>
+
+      <section class="blocco" id="robot">
+        <h2>Robot e motori di ricerca</h2>
+        <p class="muted">Programmi automatici che leggono il sito: non sono contati nelle visite. Se Google passa spesso, il sito viene indicizzato.</p>
+        ${scheda('Passaggi dei robot', tabella(d.robot, [
+          { t: 'Robot', k: 'nome' }, { t: 'Richieste', k: 'richieste', n: 1 }, { t: 'Ultimo passaggio', f: (r) => quando(r.ultima) },
+          { t: 'Pagine lette', f: (r) => `<span class="percorso-visita">${(r.pagine || []).slice(0, 6).map(esc).join(', ')}</span>` }],
+          'Nessun robot in questo periodo.'))}
+      </section>`;
+
+    $('#grafico .scelte').onclick = (e) => {
+      const b = e.target.closest('[data-m]'); if (!b) return;
+      metrica = b.dataset.m;
+      document.querySelectorAll('#grafico [data-m]').forEach((x) => x.setAttribute('aria-pressed', x === b));
+      disegnaGrafico();
+    };
+    disegnaGrafico();
+    attivaGeneratore();
+  }
+
+  async function adesso() {
+    try {
+      const a = await api('/admin/statistiche/adesso');
+      $('#adesso').textContent = a.persone === 1 ? '1 persona sul sito adesso' : `${a.persone} persone sul sito adesso`;
+      $('#adesso').title = a.sessioni.map((s) => `${s.pagina}${s.gioco ? ' (' + s.gioco + ')' : ''} – ${s.sorgente || ''} – ${s.citta || paese(s.paese)}`).join('\n') || 'Nessuno negli ultimi 5 minuti';
+    } catch { /* ignorato */ }
+  }
+  let tRidim; addEventListener('resize', () => { clearTimeout(tRidim); tRidim = setTimeout(disegnaGrafico, 150); });
+  adesso(); setInterval(adesso, 30_000);
+  carica();
+})();
+</script>
+</body>
+</html>

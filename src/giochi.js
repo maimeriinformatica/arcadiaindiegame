@@ -40,13 +40,76 @@ async function caricaVoci(prefisso, voci) {
   return voci.length;
 }
 
-async function importaZip(slug, versione, buffer, fileAvvio) {
+// ---------------- Scheda del gioco dentro lo ZIP (gioco.json + copertina) ----------------
+const CATEGORIE = ['3D', 'Platform', 'Arcade', 'Avventura', 'Puzzle', 'Corse', 'Sport', 'Strategia', 'Narrativo', 'Da tavolo', 'Altro'];
+const FILE_SCHEDA = /^(gioco|game|scheda)\.json$/i;
+const FILE_COPERTINA = /^(copertina|cover|thumbnail|thumb|anteprima|poster)\.(png|jpe?g|webp|gif|svg)$/i;
+const TIPI_IMMAGINE = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', svg: 'image/svg+xml' };
+
+// Accetta nomi italiani o inglesi e testi su più righe (stringa o elenco).
+function normalizzaScheda(j) {
+  if (!j || typeof j !== 'object' || Array.isArray(j)) return {};
+  const pick = (...k) => { for (const x of k) if (j[x] != null && j[x] !== '') return j[x]; return undefined; };
+  const testo = (v) => (v == null ? undefined : (Array.isArray(v) ? v.join('\n') : String(v)).trim());
+  const flag = (v) => (v == null ? undefined : v === true || v === 1 || /^(true|si|sì|yes|1)$/i.test(String(v)));
+  const cat = testo(pick('categoria', 'category', 'genere', 'genre'));
+  return {
+    titolo: testo(pick('titolo', 'title', 'nome', 'name')),
+    sottotitolo: testo(pick('sottotitolo', 'descrizione_breve', 'descrizioneBreve', 'frase', 'subtitle', 'tagline', 'short_description')),
+    descrizione: testo(pick('descrizione', 'descrizione_lunga', 'descrizioneLunga', 'description', 'long_description')),
+    comandi: testo(pick('comandi', 'controlli', 'controls', 'istruzioni', 'how_to_play')),
+    autore: testo(pick('autore', 'author', 'studio', 'sviluppatore', 'developer')),
+    categoria: cat ? (CATEGORIE.find((c) => c.toLowerCase() === cat.toLowerCase()) || 'Altro') : undefined,
+    file_avvio: testo(pick('file_avvio', 'avvio', 'entry', 'index')),
+    slug: testo(pick('slug', 'id')),
+    copertina: testo(pick('copertina', 'cover', 'immagine', 'image', 'thumbnail')),
+    pubblicato: flag(pick('pubblicato', 'published')),
+    gratuito: flag(pick('gratuito', 'gratis', 'free')),
+    in_evidenza: flag(pick('in_evidenza', 'evidenza', 'featured')),
+  };
+}
+
+function apriZip(buffer) {
   let zip;
   try { zip = new AdmZip(buffer); } catch { throw Object.assign(new Error('File ZIP non valido.'), { status: 400 }); }
-  const voci = zip.getEntries().filter((e) => !e.isDirectory)
-    .map((e) => ({ percorso: e.entryName.replace(/\\/g, '/'), dati: e.getData() }));
-  const puliti = normalizza(voci, fileAvvio);
-  return caricaVoci(`giochi/${slug}/v${versione}`, puliti);
+  return zip.getEntries().filter((e) => !e.isDirectory)
+    .map((e) => ({ percorso: e.entryName.replace(/\\/g, '/'), dati: e.getData() }))
+    .filter((v) => !IGNORA.test(v.percorso));
+}
+
+// Legge dallo ZIP la scheda (gioco.json) e l'immagine di copertina, se presenti.
+function analizzaZip(buffer) {
+  const voci = apriZip(buffer);
+  const piuCorto = (lista) => lista.sort((a, b) => a.percorso.split('/').length - b.percorso.split('/').length)[0];
+  const nome = (p) => p.split('/').pop();
+  const cartella = (p) => (p.includes('/') ? p.slice(0, p.lastIndexOf('/') + 1) : '');
+  let meta = {};
+  let errScheda = null;
+  const vs = piuCorto(voci.filter((v) => FILE_SCHEDA.test(nome(v.percorso))));
+  if (vs) {
+    try { meta = normalizzaScheda(JSON.parse(vs.dati.toString('utf8').replace(/^\uFEFF/, ''))); }
+    catch (e) { errScheda = `Il file ${vs.percorso} non è un JSON valido (${e.message.slice(0, 80)}).`; }
+  }
+  let cop = null;
+  if (meta.copertina) {
+    const cercato = (cartella(vs.percorso) + meta.copertina.replace(/^\.?\//, '')).toLowerCase();
+    cop = voci.find((v) => v.percorso.toLowerCase() === cercato) || null;
+  }
+  if (!cop) {
+    const cand = voci.filter((v) => FILE_COPERTINA.test(nome(v.percorso)));
+    cop = (vs && cand.find((v) => cartella(v.percorso) === cartella(vs.percorso))) || piuCorto(cand) || null;
+  }
+  const copertina = cop ? { dati: cop.dati, ext: nome(cop.percorso).split('.').pop().toLowerCase().replace('jpeg', 'jpg') } : null;
+  if (copertina) copertina.tipo = TIPI_IMMAGINE[copertina.ext];
+  return { voci, meta, copertina, errScheda, haScheda: Boolean(vs) };
+}
+
+async function importaVoci(slug, versione, voci, fileAvvio) {
+  return caricaVoci(`giochi/${slug}/v${versione}`, normalizza(voci, fileAvvio));
+}
+
+async function importaZip(slug, versione, buffer, fileAvvio) {
+  return importaVoci(slug, versione, apriZip(buffer), fileAvvio);
 }
 
 async function importaCartella(slug, versione, cartella) {
@@ -63,4 +126,4 @@ async function importaCartella(slug, versione, cartella) {
   return caricaVoci(`giochi/${slug}/v${versione}`, normalizza(voci));
 }
 
-module.exports = { slugify, importaZip, importaCartella };
+module.exports = { slugify, importaZip, importaCartella, analizzaZip, importaVoci, normalizzaScheda, CATEGORIE };
