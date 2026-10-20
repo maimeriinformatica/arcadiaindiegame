@@ -77,6 +77,10 @@ async function sincronizzaAbbonamento(paypalId, utenteIdAtteso) {
              ultimo_pagamento=COALESCE(EXCLUDED.ultimo_pagamento, abbonamenti.ultimo_pagamento),
              piano_id=EXCLUDED.piano_id, sincronizzato_il=NOW()`,
   [utenteId, s.id, s.plan_id, s.status, validoFino, ultimo]);
+  if (s.status === 'ACTIVE') {
+    // Lazy require: inviti.js non dipende da questo modulo, ma evitiamo comunque cicli all'avvio.
+    await require('./inviti').abbonamentoAttivato(utenteId).catch((e) => console.warn('Premio inviti:', e.message));
+  }
   return { utenteId, stato: s.status, validoFino };
 }
 

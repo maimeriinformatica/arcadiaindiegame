@@ -10,6 +10,7 @@ const storage = require('./src/storage');
 const { caricaUtente } = require('./src/accesso');
 const { seminaDemo } = require('./src/semina');
 const stat = require('./src/statistiche');
+const inviti = require('./src/inviti');
 
 const app = express();
 app.set('trust proxy', 1); // Render sta dietro un proxy
@@ -38,6 +39,7 @@ app.use((req, res, next) => {
 ${erroreAvvio ? '' : '<script>setTimeout(()=>location.reload(),4000)</script>'}`);
 });
 app.use(caricaUtente);
+app.use(inviti.cattura); // ?invito=CODICE → cookie per la registrazione
 
 // Statistiche di traffico (solo pagine del portale: i giochi non vengono toccati)
 app.use(stat.segnali);
@@ -52,6 +54,7 @@ app.use(require('./src/rotte/gioca'));
 // Pagine HTML: sostituisce i segnaposto con i dati della piattaforma.
 const PUBBLICA = path.join(__dirname, 'public');
 const cacheHtml = new Map();
+const VERSIONE = Date.now().toString(36); // cambia a ogni deploy: il browser riscarica CSS e script aggiornati
 function paginaHtml(nome) {
   if (!config.produzione || !cacheHtml.has(nome)) {
     const d = config.ditta;
@@ -64,7 +67,8 @@ function paginaHtml(nome) {
       .replaceAll('{{DITTA_PIVA}}', d.piva)
       .replaceAll('{{DITTA_PEC}}', d.pec)
       .replaceAll('{{DITTA_EMAIL}}', d.email || d.pec)
-      .replace('</body>', `${stat.SCRIPT}\n</body>`);
+      .replace('</body>', `${stat.SCRIPT}\n</body>`)
+      .replace(/(href|src)="(\/(?:css|js)\/[a-z0-9-]+\.(?:css|js))"/g, `$1="$2?v=${VERSIONE}"`);
     cacheHtml.set(nome, html);
   }
   return cacheHtml.get(nome);

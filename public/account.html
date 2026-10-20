@@ -30,6 +30,19 @@
         <button class="btn secondario" id="esci">Esci dall'account</button></div>
     </section>
   </div>
+  <section class="pannello" id="invita" style="margin-top:30px" hidden>
+    <h2>Invita gli amici, gioca gratis</h2>
+    <p>Ogni <b id="inv-n">3</b> amici che si abbonano con il tuo link, ti regaliamo <b>un mese di gioco</b>.</p>
+    <label for="inv-link">Il tuo link personale</label>
+    <input type="text" id="inv-link" readonly style="width:100%">
+    <div class="riga-azioni" style="justify-content:flex-start;flex-wrap:wrap;gap:10px">
+      <button class="btn" id="inv-condividi" type="button">Condividi</button>
+      <button class="btn secondario" id="inv-copia" type="button">Copia il link</button>
+      <a class="btn secondario" id="inv-whatsapp" target="_blank" rel="noopener">WhatsApp</a>
+    </div>
+    <p class="muted piccolo" id="inv-stato" style="margin-top:12px"></p>
+    <p class="muted piccolo">Il mese gratis si aggiunge dopo la fine del tuo accesso attuale. Se sei abbonato con PayPal, il rinnovo continua finché non lo disdici.</p>
+  </section>
   <h2 style="margin-top:40px">I miei preferiti</h2>
   <div class="scaffale" id="preferiti"></div>
 </main>
@@ -74,6 +87,26 @@
     } catch (err) { messaggio($('#msg-pw'), err.message); }
   };
   $('#esci').onclick = async () => { await api('/esci', { method: 'POST' }); location.href = '/'; };
+
+  try {
+    const inv = await api('/invita');
+    const testo = `Gioco a ${NOME}: videogiochi fatti in Italia, tutti a {{PREZZO}} € al mese. Prova anche tu:`;
+    $('#invita').hidden = false;
+    $('#inv-n').textContent = inv.amiciPerPremio;
+    $('#inv-link').value = inv.link;
+    $('#inv-whatsapp').href = `https://wa.me/?text=${encodeURIComponent(`${testo} ${inv.link}`)}`;
+    const parti = [`Amici iscritti con il tuo link: ${inv.iscritti}`, `abbonati: ${inv.abbonati}`];
+    if (inv.mesiOttenuti) parti.push(`mesi gratis ottenuti: ${inv.mesiOttenuti}`);
+    $('#inv-stato').textContent = `${parti.join(' · ')}. Te ne mancano ${inv.mancano} per il prossimo mese gratis.`;
+    $('#inv-copia').onclick = async () => {
+      try { await navigator.clipboard.writeText(inv.link); $('#inv-copia').textContent = 'Copiato!'; }
+      catch { $('#inv-link').select(); }
+    };
+    $('#inv-condividi').onclick = async () => {
+      if (navigator.share) { try { await navigator.share({ title: NOME, text: testo, url: inv.link }); } catch { /* annullato */ } }
+      else $('#inv-copia').click();
+    };
+  } catch { /* inviti non disponibili */ }
 
   const { giochi } = await api('/giochi');
   const pref = giochi.filter((g) => g.preferito);

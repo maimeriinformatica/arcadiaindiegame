@@ -3,6 +3,7 @@ const config = require('../config');
 const { q, uno } = require('../db');
 const A = require('../accesso');
 const paypal = require('../paypal');
+const inviti = require('../inviti');
 
 const r = express.Router();
 
@@ -52,6 +53,8 @@ r.post('/registrati', limita, async (req, res) => {
     'INSERT INTO utenti (email, nome, password_hash, is_admin) VALUES ($1,$2,$3,$4) RETURNING *',
     [email, nome, await A.hash(password), admin],
   );
+  await inviti.collega(u.id, (req.cookies && req.cookies[inviti.COOKIE]) || req.body.invito, res)
+    .catch((e) => console.warn('Invito non collegato:', e.message));
   A.impostaSessione(res, u);
   res.json({ utente: pubblico(u) });
 });
@@ -93,6 +96,11 @@ r.post('/cambia-password', A.richiediLogin, async (req, res) => {
   if (nuova.length < 8) return res.status(400).json({ errore: 'La nuova password deve avere almeno 8 caratteri.' });
   await q('UPDATE utenti SET password_hash=$1 WHERE id=$2', [await A.hash(nuova), u.id]);
   res.json({ ok: true });
+});
+
+// ---------------- Inviti ----------------
+r.get('/invita', A.richiediLogin, async (req, res) => {
+  res.json(await inviti.riepilogo(req.utente.id));
 });
 
 // ---------------- Catalogo ----------------

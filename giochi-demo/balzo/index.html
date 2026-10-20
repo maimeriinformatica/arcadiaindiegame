@@ -97,6 +97,8 @@ function leggiGamepad() {
   };
 }
 
+// Comunica il risultato alla piattaforma, che propone di condividerlo.
+function risultato(testo) { try { if (window.parent !== window) window.parent.postMessage({ arcadia: 'risultato', testo }, '*'); } catch (e) { /* nessuna piattaforma */ } }
 let stato = 'titolo'; // titolo, gioco, fine, vinto
 let livello = 0, mappa, eroe, nemici, monete, bandiera, camX = 0, punti = 0, vite = 3, particelle = [];
 
@@ -133,7 +135,7 @@ function avvia() {
 function perdiVita() {
   vite--;
   scoppio(eroe.x, eroe.y, '#ff6b7d');
-  if (vite <= 0) { stato = 'fine'; return; }
+  if (vite <= 0) { stato = 'fine'; risultato(`Balzo: ${punti} punti, arrivato al livello ${livello + 1} su ${LIVELLI.length}`); return; }
   eroe.x = eroe.inizio.x; eroe.y = eroe.inizio.y; eroe.vx = eroe.vy = 0;
 }
 function scoppio(x, y, col) {
@@ -206,7 +208,7 @@ function aggiorna() {
   // Bandiera
   if (Math.abs(eroe.x - bandiera.x) < 26 && eroe.y > bandiera.y - 20) {
     punti += 100; livello++;
-    if (livello >= LIVELLI.length) { stato = 'vinto'; return; }
+    if (livello >= LIVELLI.length) { stato = 'vinto'; risultato(`Balzo finito tutto: ${punti} punti! 🏁`); return; }
     carica(livello);
   }
 

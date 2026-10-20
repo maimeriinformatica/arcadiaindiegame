@@ -54,3 +54,10 @@ CREATE TABLE IF NOT EXISTS eventi_paypal (
   tipo        TEXT NOT NULL,
   ricevuto_il TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Inviti agli amici: link personale, chi ha invitato chi, premi già assegnati.
+ALTER TABLE utenti ADD COLUMN IF NOT EXISTS codice_invito TEXT UNIQUE;
+ALTER TABLE utenti ADD COLUMN IF NOT EXISTS invitato_da INTEGER REFERENCES utenti(id) ON DELETE SET NULL;
+ALTER TABLE utenti ADD COLUMN IF NOT EXISTS invito_valido_il TIMESTAMPTZ;   -- quando l'invitato si è abbonato
+ALTER TABLE utenti ADD COLUMN IF NOT EXISTS premi_inviti INTEGER NOT NULL DEFAULT 0;
+CREATE INDEX IF NOT EXISTS utenti_invitato_da_idx ON utenti(invitato_da);

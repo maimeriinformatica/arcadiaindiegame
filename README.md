@@ -35,6 +35,22 @@ Menu **Statistiche** → `/statistiche.html`. Raccoglie, senza servizi esterni e
 I dati stanno nella tabella `stat_visite` (creata da sola all'avvio) e vengono cancellati dopo 13 mesi.
 Le parole cercate su Google arrivano solo collegando il sito a Google Search Console.
 
+## Inviti agli amici e condivisione
+
+- **Link personale**: ogni utente trova in *Account* il suo link (`/?invito=CODICE`) con i pulsanti Condividi, Copia e WhatsApp.
+  Chi apre il link e si registra entro 30 giorni resta collegato a chi l'ha invitato.
+- **Premio**: ogni **3 amici invitati che attivano l'abbonamento** (non basta la registrazione), chi li ha invitati riceve
+  **30 giorni di accesso omaggio**, aggiunti dopo la fine del suo accesso attuale. Il conteggio parte quando PayPal conferma
+  l'abbonamento (`ACTIVE`), quindi un account finto senza pagamento non vale. I premi già dati non si ripetono.
+- **Condividi nel player**: nella barra del gioco c'è il pulsante *Condividi*, che manda il link del gioco con il codice invito
+  di chi gioca (così anche le partite condivise portano iscritti).
+- **Risultato a fine partita**: un gioco può proporre di condividere il punteggio con una riga JavaScript:
+  ```js
+  if (window.parent !== window) parent.postMessage({ arcadia: 'risultato', testo: 'Caveau aperto in 5 tentativi 🟡🟡⚪' }, '*');
+  ```
+  La piattaforma mostra "Bella partita! Vuoi sfidare un amico?" e prepara il messaggio con il link. Balzo lo fa già.
+- Tabelle: colonne `codice_invito`, `invitato_da`, `invito_valido_il`, `premi_inviti` in `utenti` (create da sole all'avvio).
+
 ## Come si protegge l'accesso
 
 I file dei giochi non sono pubblici: passano dal server, che controlla l'abbonamento a ogni
